@@ -363,3 +363,25 @@ def test_grip_workpiece_at_expected_position():
         )
 
         assert driver.disconnect()
+
+
+@skip_without_gripper
+def test_remove_workpiece_manually():
+    driver = Driver()
+
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        assert not asyncio.run(driver.release_for_manual_movement())
+
+        assert driver.connect(
+            host=host, port=port, serial_port=serial_port, device_id=12
+        )
+        # not in error state
+        assert asyncio.run(driver.acknowledge())
+        assert asyncio.run(driver.release_for_manual_movement())
+        # in error state
+        assert asyncio.run(driver.fast_stop())
+        assert asyncio.run(driver.release_for_manual_movement()), host
+
+        assert driver.disconnect()

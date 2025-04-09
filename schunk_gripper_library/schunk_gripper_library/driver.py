@@ -513,6 +513,35 @@ class Driver(object):
         desired_bits = {"5": cmd_toggle_before ^ 1, "4": 1, "12": 1}
         return await self.wait_for_status(bits=desired_bits)
 
+    async def release_for_manual_movement(self) -> bool:
+        if not self.connected:
+            return False
+
+        self.clear_plc_output()
+        self.send_plc_output()
+        cmd_toggle_before = None
+
+        if self.get_status_bit(bit=7) == 1:
+            cmd_toggle_before = self.get_status_bit(bit=5)
+            self.set_control_bit(bit=5, value=True)
+            self.send_plc_output()
+        else:
+            self.set_control_bit(bit=0, value=False)
+            self.send_plc_output()
+            self.clear_plc_output()
+            desired_bits = {"7": 1}
+            if not await self.wait_for_status(bits=desired_bits):
+                return False
+            self.set_control_bit(bit=0, value=True)
+            self.send_plc_output()
+            self.clear_plc_output()
+            cmd_toggle_before = self.get_status_bit(bit=5)
+            self.set_control_bit(bit=5, value=True)
+            self.send_plc_output()
+
+        desired_bits = {"5": cmd_toggle_before ^ 1, "8": 1}
+        return await self.wait_for_status(bits=desired_bits, timeout_sec=2)
+
     def receive_plc_input(self) -> bool:
         with self.input_buffer_lock:
             data = self.read_module_parameter(self.plc_input)
