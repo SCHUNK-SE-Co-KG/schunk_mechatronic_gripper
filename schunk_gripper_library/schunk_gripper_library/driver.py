@@ -542,6 +542,20 @@ class Driver(object):
         desired_bits = {"5": cmd_toggle_before ^ 1, "8": 1}
         return await self.wait_for_status(bits=desired_bits, timeout_sec=2)
 
+    async def brake_test(self):
+        if not self.connected:
+            return False
+
+        self.clear_plc_output()
+        self.send_plc_output()
+        cmd_toggle_before = self.get_status_bit(bit=5)
+        self.set_control_bit(bit=30, value=True)
+        self.send_plc_output()
+
+        desired_bits = {"5": cmd_toggle_before ^ 1, "4": 1}
+
+        return await self.wait_for_status(bits=desired_bits)
+
     def receive_plc_input(self) -> bool:
         with self.input_buffer_lock:
             data = self.read_module_parameter(self.plc_input)

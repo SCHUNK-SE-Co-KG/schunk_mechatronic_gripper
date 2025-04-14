@@ -385,3 +385,24 @@ def test_remove_workpiece_manually():
         assert asyncio.run(driver.release_for_manual_movement()), host
 
         assert driver.disconnect()
+
+
+@skip_without_gripper
+def test_brake_test():
+    driver = Driver()
+
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        # Webserver functionality not yet implemented
+        if port:
+            return
+        assert not asyncio.run(driver.brake_test())
+
+        assert driver.connect(
+            host=host, port=port, serial_port=serial_port, device_id=12
+        )
+        assert asyncio.run(driver.acknowledge())
+
+        assert asyncio.run(driver.brake_test())
+        assert driver.disconnect()
