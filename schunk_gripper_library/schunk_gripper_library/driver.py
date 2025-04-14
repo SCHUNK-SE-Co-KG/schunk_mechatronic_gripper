@@ -46,12 +46,6 @@ class NonExclusiveSerialClient(ModbusSerialClient):
             self.close()
         return self.socket is not None
 
-class JogFeedback(Enum):
-    COMMAND_RECIEVED = 1
-    LIMIT_REACHED = 2
-    ERROR = 3
-    CANCELLED = 4
-    NOT_CONNECTED = 5
 
 class Driver(object):
     def __init__(self) -> None:
@@ -494,9 +488,9 @@ class Driver(object):
             return abs(still_to_go) / (ratio * self.module_parameters["max_grp_vel"])
         return 0.0
 
-    async def jog_positive(self, velocity: int, timeout: float = 1.0) -> JogFeedback:
+    async def jog_positive(self, velocity: int) -> bool:
         if not self.connected:
-            return self.JogFeedback.NOT_CONNECTED
+            return False
 
         self.clear_plc_output()
         self.send_plc_output()
@@ -507,26 +501,13 @@ class Driver(object):
         self.set_target_speed(velocity)
 
         self.send_plc_output()
-        desired_bits_command_recieved = {"5": cmd_toggle_before ^ 1}
-        desired_bits_reset_jog = {"5": cmd_toggle_before ^ 1, "13": 1}
-        desired_bits_reaching_limit = {"5": cmd_toggle_before ^ 1, "13": 1, "4": 1}
+        desired_bits = {"5": cmd_toggle_before ^ 1}
 
-        if await self.wait_for_status(
-            bits=desired_bits_reaching_limit, timeout_sec=timeout
-        ):
-            return self.JogFeedback.LIMIT_REACHED
-        elif await self.wait_for_status(bits=desired_bits_reset_jog, timeout_sec=0.1):
-            return self.JogFeedback.CANCELLED
-        elif await self.wait_for_status(
-            bits=desired_bits_command_recieved, timeout_sec=0.1
-        ):
-            return self.JogFeedback.COMMAND_RECIEVED
-        else:
-            return self.JogFeedback.ERROR
+        return await self.wait_for_status(bits=desired_bits)
 
-    async def jog_negative(self, velocity: int, timeout: float = 1.0) -> JogFeedback:
+    async def jog_negative(self, velocity: int) -> bool:
         if not self.connected:
-            return self.JogFeedback.NOT_CONNECTED
+            return False
 
         self.clear_plc_output()
         self.send_plc_output()
@@ -537,23 +518,11 @@ class Driver(object):
         self.set_target_speed(velocity)
 
         self.send_plc_output()
-        desired_bits_command_recieved = {"5": cmd_toggle_before ^ 1}
-        desired_bits_reset_jog = {"5": cmd_toggle_before ^ 1, "13": 1}
+        # desired_bits = {"5": cmd_toggle_before ^ 1}
+        # desired_bits_reset_jog = {"5": cmd_toggle_before ^ 1, "13": 1}
         desired_bits_reaching_limit = {"5": cmd_toggle_before ^ 1, "13": 1, "4": 1}
 
-        if await self.wait_for_status(
-            bits=desired_bits_reaching_limit, timeout_sec=timeout
-        ):
-            return self.JogFeedback.LIMIT_REACHED
-        elif await self.wait_for_status(bits=desired_bits_reset_jog, timeout_sec=0.1):
-            return self.JogFeedback.CANCELLED
-        elif await self.wait_for_status(
-            bits=desired_bits_command_recieved, timeout_sec=0.1
-        ):
-            return self.JogFeedback.COMMAND_RECIEVED
-
-        else:
-            return self.JogFeedback.ERROR
+        return await self.wait_for_status(bits=desired_bits_reaching_limit)
 
     async def reset_jog(self) -> bool:
         if not self.connected:
