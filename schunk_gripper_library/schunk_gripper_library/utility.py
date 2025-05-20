@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from httpx import Client, ConnectTimeout, ConnectError
 import pytest
+from pymodbus.client.serial import ModbusSerialClient as ModbusClient
+import pymodbus.logging as logging
 import os
 import termios
 
@@ -128,6 +130,41 @@ class Scheduler(object):
             if task.future:
                 task.future.set_result(result)
             self.tasks.task_done()
+
+
+class Scanner(object):
+    def __init__(self):
+        pass
+
+    def scan(self, start_address=1, end_address=247):
+        from pymodbus.exceptions import ModbusIOException, ModbusException
+
+        client = ModbusClient(
+            port="/dev/ttyUSB0", baudrate=115200, timeout=0.2, parity="N", stopbits=1
+        )
+        if not client.connect():
+
+            return []
+
+        discovered_devices = []
+
+        module_type_register = int("0x0500", 16) - 1
+
+        for address in range(start_address, end_address + 1):
+            try:
+                response = client.read_holding_registers(
+                    address=module_type_register, count=1, slave=address
+                )
+
+                if not response.isError():
+                    discovered_devices.append(address)
+                    logging.Log.info(f"Found device at adress:{address}")
+            except (ModbusIOException, ModbusException):
+                continue
+
+        client.close()
+        print(f"Discovered devices: {discovered_devices}")
+        return discovered_devices
 
 
 def gripper_available() -> bool:
