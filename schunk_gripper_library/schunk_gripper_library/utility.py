@@ -7,6 +7,8 @@ from pathlib import Path
 from httpx import Client, ConnectTimeout, ConnectError
 import pytest
 from pymodbus.client.serial import ModbusSerialClient as ModbusClient
+from pymodbus.exceptions import ModbusIOException, ModbusException, ConnectionException
+import re
 import pymodbus.logging as logging
 import os
 import termios
@@ -133,38 +135,127 @@ class Scheduler(object):
 
 
 class Scanner(object):
-    def __init__(self):
-        pass
+    def __init__(self, driver):
+        self.driver = driver
 
-    def scan(self, start_address=1, end_address=247):
-        from pymodbus.exceptions import ModbusIOException, ModbusException
+    async def scan(self, start_address=1, end_address=20, gripper_num=None):
+        """
+        Iterate over a range of Modbus IDs to find devices
+        """
+        from pymodbus.client.serial import AsyncModbusSerialClient
 
-        client = ModbusClient(
-            port="/dev/ttyUSB0", baudrate=115200, timeout=0.2, parity="N", stopbits=1
+        client = AsyncModbusSerialClient(
+            port="/dev/ttyUSB0",
+            baudrate=115200,
+            timeout=0.1,
+            parity="N",
+            stopbits=1,
+            bytesize=8,
+            retries=0,
         )
-        if not client.connect():
 
+        if not await client.connect():
+            print("Failed to connect to serial port")
             return []
-
-        discovered_devices = []
+        client.set_max_no_responses(99999)
 
         module_type_register = int("0x0500", 16) - 1
+        discovered_devices = []
 
-        for address in range(start_address, end_address + 1):
-            try:
-                response = client.read_holding_registers(
-                    address=module_type_register, count=1, slave=address
-                )
+        try:
+            for id in range(start_address, end_address + 1):
+                if not client.connected:
+                    print(f"Reconnecting to Modbus client for ID {id}")
+                    await client.connect()
+                print(f"connected: {client.connected}")
 
-                if not response.isError():
-                    discovered_devices.append(address)
-                    logging.Log.info(f"Found device at adress:{address}")
-            except (ModbusIOException, ModbusException):
-                continue
+                try:
+                    print(await client.read_device_information(slave=id))
+                    response = await client.read_holding_registers(
+                        address=module_type_register,
+                        count=1,
+                        slave=id,
+                        no_response_expected=True,
+                    )
+                    print(f"Scanning ID {id}...")
 
-        client.close()
-        print(f"Discovered devices: {discovered_devices}")
-        return discovered_devices
+                    discovered_devices.append(response.dev_id)
+                    print(f"Found device at address: {response.dev_id}")
+
+                except Exception as e:
+                    print(f"Error reading from ID {id}: {e}")
+                    pass
+
+            return discovered_devices
+        finally:
+            if client.connected:
+                client.close()
+                time.sleep(3)
+
+    def send_broadcast_message(self, register_address, value):
+        """
+        Send a broadcast message to all devices on the Modbus network
+        and check which devices respond
+        !!!only works since the Gripper reponds to every call!!! not very reliable
+        """
+        client = ModbusClient(
+            port="/dev/ttyUSB0",
+            baudrate=115200,
+            timeout=0.1,
+            parity="N",
+            stopbits=1,
+            bytesize=8,
+            retries=10,
+        )
+
+        device_ids = []
+
+        if not client.connect():
+            print("Failed to connect to serial port")
+            return []
+        try:
+            # Write to all devices using broadcast address (slave=0)
+            response = client.write_register(
+                address=register_address, value=value, slave=0  # Broadcast address
+            )
+
+            # Note: Broadcast messages don't return responses from devices
+            # The response just indicates if the message was sent successfully
+            if not response.isError():
+                print("Broadcast message sent successfully to all devices.")
+                return True
+            else:
+                print(f"Failed to send broadcast message: {response}")
+                return False
+        except ModbusIOException as e:
+            # This catches the specific "Input/Output" error you mentioned
+            if "request ask for id=0" in str(e):
+                print(f"Device responded with its own ID: {e}")
+                # Extract the actual device ID from the error message
+                match = re.search(r"but id=(\d+)", str(e))
+                if match:
+                    actual_id = int(match.group(1))
+                    device_ids.append(actual_id)
+                    print(f"Device has ID: {actual_id}")
+            else:
+                print(f"Modbus I/O Error during broadcast: {e}")
+            return False
+        except ConnectionException as e:
+            print(f"Connection error during broadcast: {e}")
+            return False
+
+        except ModbusException as e:
+            print(f"General Modbus error during broadcast: {e}")
+            return False
+
+        except Exception as e:
+            print(f"Unexpected error sending broadcast message: {e}")
+            return False
+
+        finally:
+            print(device_ids)
+            client.close()
+            print("Closed Modbus client connection")
 
 
 def gripper_available() -> bool:

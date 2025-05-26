@@ -136,6 +136,7 @@ class Driver(Node):
             "~/load_previous_configuration",
             self._load_previous_configuration_cb,
         )
+        self.scan_srv = self.create_service(Trigger, "~/scan", self._scan_cb)
         self.add_on_set_parameters_callback(self._param_cb)
 
         # For concurrently running publishers
@@ -751,6 +752,30 @@ class Driver(Node):
                 time.sleep(max(0, next_time - now))
 
     # Service callbacks
+    def _scan_cb(self, request: Trigger.Request, response: Trigger.Response):
+        self.get_logger().debug("---> Scan")
+        grippers = self.grippers.copy()
+        if len(grippers) == 0:
+            self.get_logger().warn("No grippers to scan.")
+            response.success = False
+            response.message = "No grippers to scan."
+            return response
+
+        self.reset_grippers()
+        for i in range(len(grippers)):
+            self.get_logger().info("### adding gripper")
+            if not self.add_gripper(
+                serial_port="/dev/ttyUSB0", device_id=12 if i == 0 else 13
+            ):
+                self.get_logger().error("Adding gripper failed, resetting")
+                self.grippers = grippers
+                response.success = False
+                response.message = "Adding gripper failed"
+                return response
+
+        response.success = True
+        return response
+
     def _add_gripper_cb(
         self, request: AddGripper.Request, response: AddGripper.Response
     ):
