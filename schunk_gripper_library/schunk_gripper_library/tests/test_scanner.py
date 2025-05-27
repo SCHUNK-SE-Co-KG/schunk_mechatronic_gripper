@@ -1,39 +1,42 @@
-from schunk_gripper_library.driver import Driver
 from schunk_gripper_library.utility import skip_without_gripper, Scanner
 import asyncio
 
 
 @skip_without_gripper
-def test_scanner_returns_list_of_IDs(time_execution):
+def test_scanner_returns_list_of_IDs(time_scan):
     start_address = 1
     end_address = 20
-    driver = Driver()
 
-    driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
-    scanner = Scanner(driver)
+    scanner = Scanner()
 
-    result = asyncio.run(
-        scanner.scan(start_address=start_address, end_address=end_address)
+    result, execution_time = time_scan(
+        scanner, start_address=start_address, end_address=end_address
     )
 
+    print(f"Scanner execution time: {execution_time:.2f} seconds")
+    print(f"Scanner result: {result}")
     assert isinstance(result, list)
     assert len(result) != 0
     for item in result:
         assert isinstance(item, int)
 
 
+# @pytest.mark.skip
+@skip_without_gripper
+def test_change_gripper_id():
+    scanner = Scanner()
+
+    result = scanner.change_gripper_id(new_id=13)
+
+    assert result is True
+
+
 @skip_without_gripper
 def test_scanner_with_specific_device_id():
-    import time
-
-    time.sleep(5)
     start_address = 1
-    end_address = 20
+    end_address = 247
 
-    driver = Driver()
-
-    driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
-    scanner = Scanner(driver)
+    scanner = Scanner()
 
     device_id = 12
 
@@ -46,10 +49,7 @@ def test_scanner_with_specific_device_id():
 
 @skip_without_gripper
 def test_scanner_scans_specified_number_of_grippers():
-    driver = Driver()
-
-    driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
-    scanner = Scanner(driver)
+    scanner = Scanner()
 
     num_grippers = 1
 
