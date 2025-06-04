@@ -58,13 +58,13 @@ def test_get_serial_number():
 def test_force_listen():
     scanner = Scanner()
 
-    result = scanner.set_expectany(expectancy=1, slave=0)
+    result = scanner.set_expectancy(expectancy=1, slave=0)
 
     print(result)
 
 
 @skip_without_gripper
-def test_change_serialnumber_and_use_it():
+def test_change_serial_number_and_use_it():
     scanner = Scanner()
 
     scanner.change_gripper_id(old_id=0, new_id=12)
@@ -101,10 +101,10 @@ def test_change_using_serial_number():
 
 
 @skip_without_gripper
-def test_change_serialnum_1():
+def test_change_serial_number():
     scanner = Scanner()
 
-    scanner.set_expectany(expectancy=3, slave=0)
+    scanner.set_expectancy(expectancy=3, slave=0)
     time.sleep(0.2)
     serial = "87654321"
     result = scanner.change_serial_num(dev_id=20, serial_number=serial)
@@ -122,7 +122,7 @@ def test_change_serialnum_1():
 def test_setup():
     """
     Setup workflow to have multiple grippers with different IDs and serial numbers:
-    1. start one bks simlation
+    1. start one bks simulation
     2. run test_setup with a new id and serial number
     3. start second bks simulation
     4. run test_setup with a different id and serial number

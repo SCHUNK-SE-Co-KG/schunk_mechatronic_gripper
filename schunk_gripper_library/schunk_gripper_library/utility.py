@@ -13,10 +13,10 @@ import serial
 from pymodbus.exceptions import ModbusIOException
 import struct
 from pymodbus.pdu import ModbusPDU
+from pymodbus.logging import Log
 import pymodbus.logging as logging
 import os
 import termios
-
 
 def supports_parity(serial_port: str) -> bool:
     fd = None
@@ -32,6 +32,35 @@ def supports_parity(serial_port: str) -> bool:
     finally:
         if fd is not None:
             os.close(fd)
+            
+class NonExclusiveSerialClient(ModbusSerialClient):
+    def connect(self) -> bool:
+        """
+        Exact copy of the original connect() method with the sole exception of
+        using `exclusive=False` for the serial connection. We need this to have
+        several driver instances connect and speak over the same Modbus wire. A
+        high-level entity will manage concurrency with a scheduler for
+        multi-gripper scenarios.
+
+        """
+        if self.socket:  # type: ignore [has-type]
+            return True
+        try:
+            self.socket = serial.serial_for_url(
+                self.comm_params.host,
+                timeout=self.comm_params.timeout_connect,
+                bytesize=self.comm_params.bytesize,
+                stopbits=self.comm_params.stopbits,
+                baudrate=self.comm_params.baudrate,
+                parity=self.comm_params.parity,
+                exclusive=False,
+            )
+            self.socket.inter_byte_timeout = self.inter_byte_timeout
+            self.last_frame_end = None
+        except Exception as msg:
+            Log.error("{}", msg)
+            self.close()
+        return self.socket is not None
 
 
 class Task(object):
@@ -157,37 +186,6 @@ class ResponseExpectancyRequest(ModbusPDU):
     def get_response_pdu_size(self) -> int:
         # Reply carries the same 4-byte body (sub-function + data)
         return 4
-
-
-# cant import this from the driver due to circular import issues
-# change this when scanner is finished!!!
-class NonExclusiveSerialClient(ModbusSerialClient):
-    def connect(self) -> bool:
-        """
-        Exact copy of the original connect() method with the sole exception of
-        using `exclusive=False` for the serial connection. We need this to have
-        several driver instances connect and speak over the same Modbus wire. A
-        high-level entity will manage concurrency with a scheduler for
-        multi-gripper scenarios.
-
-        """
-        if self.socket:  # type: ignore [has-type]
-            return True
-        try:
-            self.socket = serial.serial_for_url(
-                self.comm_params.host,
-                timeout=self.comm_params.timeout_connect,
-                bytesize=self.comm_params.bytesize,
-                stopbits=self.comm_params.stopbits,
-                baudrate=self.comm_params.baudrate,
-                parity=self.comm_params.parity,
-                exclusive=False,
-            )
-            self.socket.inter_byte_timeout = self.inter_byte_timeout
-            self.last_frame_end = None
-        except Exception:
-            self.close()
-        return self.socket is not None
 
 
 class Scanner(object):
@@ -345,7 +343,7 @@ class Scanner(object):
             print(f"Error changing gripper ID by serial: {e}")
             return False
 
-    def set_expectany(self, expectancy: int = 1, slave: int = 0) -> bool:
+    def set_expectancy(self, expectancy: int = 1, slave: int = 0) -> bool:
         """
         Set response expectancy for Modbus devices.
         Args:
@@ -411,9 +409,9 @@ class Scanner(object):
         self.change_gripper_id(old_id=0, new_id=universal_id)
         time.sleep(0.1)
 
-        # Set probablity of response for all grippers
-        # 5 => every fith request will be recieved by the gripper
-        self.set_expectany(expectancy=20, slave=0)  # Broadcast to all
+        # Set probability of response for all grippers
+        # 5 => every fifth request will be received by the gripper
+        self.set_expectancy(expectancy=20, slave=0)  # Broadcast to all
         time.sleep(0.1)
 
         # Collect serial numbers and assign individual IDs
@@ -467,7 +465,7 @@ class Scanner(object):
                         )
 
                         if (gripper_num - len(grippers_found)) == 1:
-                            self.set_expectany(
+                            self.set_expectancy(
                                 expectancy=1, slave=0
                             )  # Set low expectancy for last gripper
 
