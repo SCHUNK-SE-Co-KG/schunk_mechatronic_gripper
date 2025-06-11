@@ -1,9 +1,8 @@
 from schunk_gripper_library.utility import skip_without_gripper, Scanner
-import asyncio
+from .etc.scanner_helper import start_bks_simulation, stop_bks_simulation, stop_all
 import time
 
 
-# @pytest.mark.skip
 @skip_without_gripper
 def test_change_gripper_id():
     scanner = Scanner()
@@ -13,137 +12,137 @@ def test_change_gripper_id():
     assert result is True
 
 
-@skip_without_gripper
-def test_scanner_with_specific_device_id():
-    start_address = 1
-    end_address = 247
+def test_get_serial_number(cleanup):
+    scanner = Scanner()
+    serial = "00000013"  # Example serial number
+    result = start_bks_simulation(sim_id=13, serial_num=serial)
+    assert result is True, "Failed to start BKS simulation with ID 13 and serial number"
+    time.sleep(0.5)  # Wait for the simulation to stabilize
+    serial_number = scanner.get_serial_number(13)
+    assert (
+        serial_number == serial
+    ), f"Expected serial number {serial}, got {serial_number}"
+    stop_bks_simulation(sim_id=13)
 
+
+def test_change_expectancy(cleanup):
     scanner = Scanner()
 
-    device_id = 12
+    assert start_bks_simulation(sim_id=14, serial_num="00000014")
 
-    grippers = asyncio.run(
-        scanner.scan(start_address=start_address, end_address=end_address)
-    )
+    assert scanner.set_expectancy(expectancy=255, slave=14)
 
-    assert device_id in grippers
+    for i in range(5):
+        assert (
+            scanner.get_serial_number(14) is None
+        ), "Griper should not respond (~1.9%% change  that it responds)"
+
+    assert (
+        stop_bks_simulation(sim_id=14) is True
+    ), "Failed to stop BKS simulation with ID 14"
 
 
-@skip_without_gripper
-def test_scanner_scans_specified_number_of_grippers():
+def test_change_id_using_serial_number(cleanup):
     scanner = Scanner()
-
-    num_grippers = 1
-
-    result = asyncio.run(scanner.scan(gripper_num=num_grippers))
-
-    assert len(result) == num_grippers
-
-
-@skip_without_gripper
-def test_get_serial_number():
-    scanner = Scanner()
-    for _ in range(10):
-        serial_number = scanner.get_serial_number(12)
-        if serial_number:
-            break
-
-    print(f"Serial number: {serial_number}")
-    assert isinstance(serial_number, str)
-    assert len(serial_number) > 0
-    assert serial_number.isalnum()
-
-
-@skip_without_gripper
-def test_force_listen():
-    scanner = Scanner()
-
-    result = scanner.set_expectancy(expectancy=1, slave=0)
-
-    print(result)
-
-
-@skip_without_gripper
-def test_change_serial_number_and_use_it():
-    scanner = Scanner()
-
-    scanner.change_gripper_id(old_id=0, new_id=12)
+    serial = "00000019"  # Example serial number
+    assert start_bks_simulation(sim_id=20, serial_num=serial)
     time.sleep(0.5)
-    # Set a known serial number as hex string
-    test_serial = "12345678"  # Hex string format
-    result = scanner.change_serial_num(dev_id=12, serial_number=test_serial)
-    print(f"Change serial number result: {result}")
-    assert result is True
+    assert scanner.get_serial_number(20) == serial
 
-    # Wait a bit for the change to take effect
+    result = scanner.change_gripper_id_by_serial_num(serial_number=serial, new_id=25)
+    assert result is True
+    assert (
+        scanner.get_serial_number(25) == serial
+    ), "Serial number does not match after changing ID"
+
+    stop_bks_simulation(sim_id=20)
+
+
+def test_create_and_stop_one_simulation_with_id_and_serial_number(cleanup):
+    scanner = Scanner()
+
+    sim_id = 21
+    serial_num = "00000020"  # Example serial number
+    result = start_bks_simulation(sim_id=sim_id, serial_num=serial_num)
+    assert result is True, "Failed to start BKS simulation with ID and serial number"
     time.sleep(0.5)
+    assert (
+        scanner.get_serial_number(sim_id) == serial_num
+    ), "Serial number does not match after starting simulation"
 
-    # Read it back to confirm
-    read_serial = scanner.get_serial_number(12)
-    print(f"Read back serial: {read_serial}")
-    assert read_serial == test_serial
-    time.sleep(0.5)
-    # Now use it to change the ID
-    result = scanner.change_gripper_id_by_serial(serial_number=read_serial, new_id=20)
-    print(f"Change using serial number result: {result}")
-    assert result is True
+    result = stop_bks_simulation(sim_id=sim_id)
+    assert result is True, "Failed to stop BKS simulation with ID and serial number"
 
 
-@skip_without_gripper
-def test_change_using_serial_number():
+def test_start_and_stop_multiple_simulations(cleanup):
     scanner = Scanner()
 
-    serial = "12345678"
+    max_simulations = 3
+    simulations = []
 
-    result = scanner.change_gripper_id_by_serial(serial_number=serial, new_id=20)
-    print(f"Change using serial number result: {result}")
-    assert result is True
+    for i in range(max_simulations):
+        sim_id = 20 + i
+        serial_num = f"000000{sim_id:02d}"
+        result = start_bks_simulation(
+            sim_id=sim_id, serial_num=serial_num, device_index=i
+        )
+        assert result is True, (
+            f"Failed to start BKS simulation with ID "
+            f"{sim_id} and serial number {serial_num}"
+        )
+
+        time.sleep(1)  # Wait for simulation to stabilize
+
+        assert scanner.get_serial_number(sim_id) == serial_num, (
+            f"Serial number does not match for ID {sim_id}."
+            f" Expected: {serial_num}, Got: {scanner.get_serial_number(sim_id)}"
+        )
+
+        simulations.append(sim_id)
+        time.sleep(1)  # Additional delay before next simulation
+
+    for sim_id in simulations:
+        result = stop_bks_simulation(sim_id)
+        assert result is True, f"Failed to stop BKS simulation with ID {sim_id}"
 
 
-@skip_without_gripper
-def test_change_serial_number():
+def test_assign_ids(cleanup):
     scanner = Scanner()
 
-    scanner.set_expectancy(expectancy=3, slave=0)
-    time.sleep(0.2)
-    serial = "87654321"
-    result = scanner.change_serial_num(dev_id=20, serial_number=serial)
-    time.sleep(0.2)
-    for _ in range(10):
-        serial_number = scanner.get_serial_number(20)
-        if serial_number:
-            break
-    print(f"Serial number after change: {serial}")
-    print(f"Change serial number result: {result}")
-    assert result is True
+    max_simulations = 3
+    simulations = []
+    start_id = 30
 
+    for i in range(max_simulations):
+        sim_id = 20 + i
+        serial_num = f"000000{sim_id:02d}"
+        result = start_bks_simulation(
+            sim_id=sim_id, serial_num=serial_num, device_index=i
+        )
+        assert result is True, (
+            f"Failed to start BKS simulation with ID"
+            f"{sim_id} and serial number {serial_num}"
+        )
 
-@skip_without_gripper
-def test_setup():
-    """
-    Setup workflow to have multiple grippers with different IDs and serial numbers:
-    1. start one bks simulation
-    2. run test_setup with a new id and serial number
-    3. start second bks simulation
-    4. run test_setup with a different id and serial number
-    """
-    scanner = Scanner()
-    wanted_serial_num = "00000017"  # Example serial number
-    new_id = 17
+        time.sleep(1)
 
-    scanner.change_serial_num(dev_id=12, serial_number=wanted_serial_num)
-    time.sleep(0.2)
-    scanner.change_gripper_id(old_id=12, new_id=new_id)
-    time.sleep(0.2)
-    serial_num = scanner.get_serial_number(new_id)
-    print(f"Serial number after setup: {serial_num}")
-    assert serial_num == wanted_serial_num
+        assert scanner.get_serial_number(sim_id) == serial_num, (
+            f"Serial number does not match for ID {sim_id}. "
+            f"Expected: {serial_num}, Got: {scanner.get_serial_number(sim_id)}"
+        )
 
+        simulations.append(sim_id)
+        time.sleep(1)  # Additional delay before next simulation
 
-@skip_without_gripper
-def test_assign_ids():
-    scanner = Scanner()
+    scanner.assign_ids(3, start_id=start_id)
 
-    result = scanner.assign_ids(3)
+    serial_nums = []
+    for x in range(max_simulations):
+        serial_num = scanner.get_serial_number(start_id + x)
+        assert serial_num is not None, f"Serial number for ID {start_id + x} is None"
+        assert (
+            serial_num not in serial_nums
+        ), f"Serial number {serial_num} for ID {start_id + x} is not unique"
+        serial_nums.append(serial_num)
 
-    assert result is True
+    result = stop_all()

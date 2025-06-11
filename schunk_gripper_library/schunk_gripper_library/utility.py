@@ -10,7 +10,6 @@ from pymodbus.client.serial import ModbusSerialClient
 from pymodbus.payload import BinaryPayloadBuilder
 from pymodbus.constants import Endian
 import serial
-from pymodbus.exceptions import ModbusIOException
 import struct
 from pymodbus.pdu import ModbusPDU
 from pymodbus.logging import Log
@@ -202,90 +201,52 @@ class Scanner(object):
         self.client.set_max_no_responses(99999)  # Set a high limit for no responses
         self.client.connect()
 
+        self.clear_buffer()
+
+    def clear_buffer(self, delay: float = 0.2):
+        """Clear any stale data from the receive and transmit buffers"""
+        if self.client.socket and self.client.socket.is_open:
+            try:
+                self.client.socket.reset_input_buffer()
+                # Add a small delay between clearing input and output
+                time.sleep(0.05)
+                self.client.socket.reset_output_buffer()
+                if delay > 0:
+                    time.sleep(delay)
+            except Exception as e:
+                print(f"Warning: Failed to clear buffers: {e}")
+
     def get_serial_number(self, slave: int) -> str | None:
-        """
-        Get the serial number of the gripper using the serial_no_num parameter.
-        Returns hex string format (e.g., "12345678").
-        """
+        """Get the serial number of the gripper using the serial_no_num parameter."""
+
+        # Clear buffer before every operation
+        self.clear_buffer()
 
         if not self.client.connected:
             self.client.connect()
+            time.sleep(0.1)
 
         try:
-            # Read from register 0x1020 (4128 decimal), count=2 for UINT32
-            result = self.client.read_holding_registers(
-                address=0x1020 - 1, slave=slave, count=2
-            )
-            if result.isError():
-                print("Error reading serial number")
-                return None
-
-            if result.dev_id != slave:
-                print(f"Unexpected device ID: {result.dev_id}, expected: {slave}")
-                return None
-
-            # Convert 2 registers (16-bit each) to 32-bit integer
-            # Combine the two 16-bit registers into a 32-bit value
-            serial_num = (result.registers[0] << 16) | result.registers[1]
-
-            # Convert to hex string format
-            serial_hex_str = f"{serial_num:08X}"
-
-            return serial_hex_str
-
-        except ModbusIOException as e:
-            print(f"Modbus IO error: {e}")
-            return None
-        except Exception as e:
-            print(f"Unexpected error reading serial number: {e}")
-            return None
-
-    def change_serial_num(self, dev_id: int, serial_number: str) -> bool:
-        """
-        Change the serial number of the gripper by writing to
-        the serial_no_num register.
-        Args:
-            dev_id: Device ID of the gripper
-            serial_number: Serial number as hex string (e.g., "12345678")
-        Note: This may not work if the register is read-only.
-        """
-
-        try:
-            # Convert hex string to integer
-            if len(serial_number) != 8:
-                raise ValueError(
-                    f"Serial number must be 8 hex characters, got: {serial_number}"
+            # Add retry mechanism for reliability
+            for attempt in range(3):
+                result = self.client.read_holding_registers(
+                    address=0x1020 - 1, slave=slave, count=2
                 )
 
-            try:
-                serial_int = int(serial_number, 16)
-            except ValueError:
-                raise ValueError(
-                    f"Serial number must be valid hex string, got: {serial_number}"
-                )
+                if not result.isError() and result.dev_id == slave:
+                    serial_num = (result.registers[0] << 16) | result.registers[1]
+                    serial_hex_str = f"{serial_num:08X}"
+                    return serial_hex_str
 
-            builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
+                time.sleep(0.2)  # Wait between attempts
 
-            # Add 32-bit serial number (UINT32 requires 2 registers)
-            builder.add_32bit_uint(serial_int)
-
-            payload = builder.to_registers()
-            register_address = 0x1020 - 1
-
-            self.client.retries = 0
-            response = self.client.write_registers(
-                register_address, payload, slave=dev_id, no_response_expected=True
-            )
-            print(f"Successfully changed gripper serial number to {serial_number}")
-            print(response)
-
-            return True
+            return None
 
         except Exception as e:
-            print(f"Unexpected error changing serial number: {e}")
-            return False
+            print(f"Error reading serial number from device {slave}: {e}")
+            return None
 
-    def change_gripper_id_by_serial(self, serial_number: str, new_id: int) -> bool:
+    def change_gripper_id_by_serial_num(self, serial_number: str, new_id: int) -> bool:
         """
         Change the ID of a specific gripper identified by its serial number.
         Args:
@@ -294,6 +255,7 @@ class Scanner(object):
         This uses a broadcast message with serial number targeting.
         """
         try:
+            self.clear_buffer()
             # Validate and convert hex string serial number to 4-byte integer
             if len(serial_number) != 8:
                 raise ValueError(
@@ -350,6 +312,7 @@ class Scanner(object):
             expectancy: Integer value (0-255) that will be converted to hex
             slave: Slave ID (0 for broadcast)
         """
+        self.clear_buffer()
 
         # Validate input range
         if not (0 <= expectancy <= 255):
@@ -376,6 +339,7 @@ class Scanner(object):
         """
 
         try:
+            self.clear_buffer()
 
             builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
             builder.add_8bit_uint(new_id)
@@ -395,29 +359,33 @@ class Scanner(object):
             print(f"Unexpected error sending broadcast message: {e}")
             return False
 
-    def assign_ids(self, gripper_num: int):
+    def assign_ids(
+        self, gripper_num: int, start_id: int = 20, universal_id: int = 10
+    ) -> bool:
         """
         Function to find grippers in the system and assign them individual IDs.
         This function will:
         Args:
             gripper_num: Number of grippers expected to be found
         """
+        self.clear_buffer()
+
         # Broadcast to change all IDs to a universal ID first
         self.client.retries = 0
-        universal_id = 10
         print(f"Broadcasting ID change from 0 to {universal_id}")
         self.change_gripper_id(old_id=0, new_id=universal_id)
-        time.sleep(0.1)
+        time.sleep(0.2)
+
+        # self.clear_buffer()
 
         # Set probability of response for all grippers
         # 5 => every fifth request will be received by the gripper
-        self.set_expectancy(expectancy=20, slave=0)  # Broadcast to all
-        time.sleep(0.1)
+        self.set_expectancy(expectancy=10, slave=0)  # Broadcast to all
+        time.sleep(0.2)
 
+        # self.clear_buffer()
         # Collect serial numbers and assign individual IDs
-        grippers_found: list[dict] = [dict()]
-        start_id = 20  # Starting ID for individual assignments
-
+        grippers_found: list[dict] = []
         attempt = 0
         while True:
             if len(grippers_found) >= gripper_num:
@@ -427,6 +395,7 @@ class Scanner(object):
                 f"Attempt {attempt + 1}: Looking for grippers with"
                 f"universal ID {universal_id}"
             )
+            attempt += 1
 
             # Ensure connection is active
             if not self.client.connected:
@@ -446,7 +415,7 @@ class Scanner(object):
                     )
                     time.sleep(0.1)
                     # Change this specific gripper's ID using its serial number
-                    success = self.change_gripper_id_by_serial(
+                    success = self.change_gripper_id_by_serial_num(
                         serial_number=serial_number, new_id=new_id
                     )
 
@@ -469,7 +438,7 @@ class Scanner(object):
                                 expectancy=1, slave=0
                             )  # Set low expectancy for last gripper
 
-            time.sleep(0.05)
+            time.sleep(0.1)
 
         if len(grippers_found) == gripper_num:
             return True

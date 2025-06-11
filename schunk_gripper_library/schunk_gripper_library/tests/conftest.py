@@ -7,6 +7,7 @@ from .etc.modbus_server import ModbusServer
 import asyncio
 import threading
 import time
+from .etc.scanner_helper import stop_all
 
 
 @pytest.fixture
@@ -73,3 +74,10 @@ def simulate_pymodbus_failure():
     yield controller
 
     patcher.stop()
+
+
+@pytest.fixture()
+def cleanup():
+    assert (
+        stop_all() is None
+    ), "Failed to stop all scanners and drivers after test execution."
