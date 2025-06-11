@@ -13,6 +13,7 @@ import serial
 import struct
 from pymodbus.pdu import ModbusPDU
 from pymodbus.logging import Log
+import os
 import pymodbus.logging as logging
 import os
 import termios
@@ -463,3 +464,34 @@ def gripper_available() -> bool:
 skip_without_gripper = pytest.mark.skipif(
     not gripper_available(), reason="No gripper/simulator available"
 )
+
+
+def skip_without_bks(func):
+    def check_bks_available():
+        # Check if BKS_SIMULATION_PATH is set
+        if not os.getenv("BKS_SIMULATION_PATH"):
+            return False, "BKS_SIMULATION_PATH environment variable not set"
+
+        # Check if the BKS simulation executable exists
+        bks_path = os.path.join(
+            os.getenv("BKS_SIMULATION_PATH"), "BKS_Simulation_Windows"
+        )
+        if not os.path.exists(bks_path):
+            return False, f"BKS simulation executable not found at {bks_path}"
+
+        # Check if tty_bus socket exists (infrastructure running)
+        tty_bus_socket = "/tmp/ttypts2mux"
+        if not os.path.exists(tty_bus_socket):
+            return False, "BKS test infrastructure not running (missing tty_bus socket)"
+
+        # Check if /dev/ttyUSB0 is available
+        if not os.path.exists("/dev/ttyUSB0"):
+            return False, "Virtual serial device /dev/ttyUSB0 not available"
+
+        return True, "BKS infrastructure available"
+
+    available, reason = check_bks_available()
+
+    return pytest.mark.skipif(
+        not available, reason=f"BKS simulation not available: {reason}"
+    )(func)

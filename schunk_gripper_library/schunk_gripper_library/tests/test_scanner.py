@@ -1,4 +1,8 @@
-from schunk_gripper_library.utility import skip_without_gripper, Scanner
+from schunk_gripper_library.utility import (
+    skip_without_gripper,
+    skip_without_bks,
+    Scanner,
+)
 from .etc.scanner_helper import start_bks_simulation, stop_bks_simulation, stop_all
 import time
 
@@ -12,6 +16,7 @@ def test_change_gripper_id():
     assert result is True
 
 
+@skip_without_bks
 def test_get_serial_number(cleanup):
     scanner = Scanner()
     serial = "00000013"  # Example serial number
@@ -25,6 +30,7 @@ def test_get_serial_number(cleanup):
     stop_bks_simulation(sim_id=13)
 
 
+@skip_without_bks
 def test_change_expectancy(cleanup):
     scanner = Scanner()
 
@@ -42,6 +48,7 @@ def test_change_expectancy(cleanup):
     ), "Failed to stop BKS simulation with ID 14"
 
 
+@skip_without_bks
 def test_change_id_using_serial_number(cleanup):
     scanner = Scanner()
     serial = "00000019"  # Example serial number
@@ -58,6 +65,7 @@ def test_change_id_using_serial_number(cleanup):
     stop_bks_simulation(sim_id=20)
 
 
+@skip_without_bks
 def test_create_and_stop_one_simulation_with_id_and_serial_number(cleanup):
     scanner = Scanner()
 
@@ -74,6 +82,7 @@ def test_create_and_stop_one_simulation_with_id_and_serial_number(cleanup):
     assert result is True, "Failed to stop BKS simulation with ID and serial number"
 
 
+@skip_without_bks
 def test_start_and_stop_multiple_simulations(cleanup):
     scanner = Scanner()
 
@@ -106,6 +115,7 @@ def test_start_and_stop_multiple_simulations(cleanup):
         assert result is True, f"Failed to stop BKS simulation with ID {sim_id}"
 
 
+@skip_without_bks
 def test_assign_ids(cleanup):
     scanner = Scanner()
 
