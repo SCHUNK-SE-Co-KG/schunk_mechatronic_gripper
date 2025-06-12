@@ -107,7 +107,6 @@ def main():
             f"    /dev/ttypts2fake0 to /dev/ttypts2fake{max_fake_devices - 1}"
         )
         print("   • /dev/ttyUSB0 is ready for your pymodbus tests")
-        print("   • Use bks_launcher.py to start/stop BKS simulations")
         print("   • Press Ctrl-C here to tear everything down and remove devices.\n")
 
         # Keep the script running

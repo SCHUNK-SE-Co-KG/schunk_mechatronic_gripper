@@ -1,4 +1,4 @@
-from schunk_gripper_library.utility import Scanner
+from ...utility import Scanner
 from pymodbus.payload import BinaryPayloadBuilder
 from pymodbus.constants import Endian
 
@@ -32,20 +32,24 @@ class ScannerTestSetup(Scanner):
         Note: This may not work if the register is read-only.
         """
         self.clear_buffer()
+        if len(serial_number) != 8:
+            raise ValueError(
+                f"Serial number must be 8 hex characters, got: {serial_number}"
+            )
+
+        if not all(c in "0123456789abcdefABCDEF" for c in serial_number):
+            raise ValueError(
+                f"Serial number must be valid hex string, got: {serial_number}"
+            )
+
+        if not (0 <= dev_id <= 247):
+            raise ValueError(f"Device ID must be between 0 and 247, got: {dev_id}")
+
         try:
             print(f"Changing serial number for device {dev_id} to {serial_number}")
             # Convert hex string to integer
-            if len(serial_number) != 8:
-                raise ValueError(
-                    f"Serial number must be 8 hex characters, got: {serial_number}"
-                )
 
-            try:
-                serial_int = int(serial_number, 16)
-            except ValueError:
-                raise ValueError(
-                    f"Serial number must be valid hex string, got: {serial_number}"
-                )
+            serial_int = int(serial_number, 16)
 
             builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
 
@@ -89,6 +93,16 @@ class BKSLauncher:
             print(f"Simulation '{sim_id}' is already running")
             return False
 
+        if serial_num is None or len(serial_num) != 8:
+            raise ValueError(
+                f"Invalid serial number '{serial_num}'. Must be 8 hex characters."
+            )
+
+        if serial_num in [sim["serial_num"] for sim in self.simulations.values()]:
+            raise ValueError(
+                f"Serial number '{serial_num}' is already in use by another simulation."
+            )
+
         fake_dev = f"/dev/ttypts2fake{device_index}"
         if not os.path.exists(fake_dev):
             print(
@@ -98,13 +112,17 @@ class BKSLauncher:
             return False
 
         sim_temp_dir = tempfile.mkdtemp(prefix=f"bks_sim_{sim_id}_")
+        log_file = os.path.join(sim_temp_dir, f"bks_sim_{sim_id}.log")
         print(f"Starting BKS simulation '{sim_id}' on {fake_dev} in {sim_temp_dir}...")
 
         sim_cmd = (
             f'"{SIM_PATH}/BKS_Simulation_Windows" EGK_40_M_B -p "{fake_dev}" -c none'
         )
 
-        full_cmd = f'cd "{sim_temp_dir}" && {sim_cmd}; exec bash'
+        # Redirect output to log file
+        full_cmd = (
+            f'cd "{sim_temp_dir}" && {sim_cmd} 2>&1 | tee "{log_file}"; exec bash'
+        )
         proc = subprocess.Popen(["gnome-terminal", "--", "bash", "-c", full_cmd])
 
         self.simulations[sim_id] = {
@@ -112,6 +130,8 @@ class BKSLauncher:
             "device": fake_dev,
             "temp_dir": sim_temp_dir,
             "device_index": device_index,
+            "log_file": log_file,
+            "serial_num": serial_num,
         }
 
         # Give it a moment to start
@@ -172,15 +192,6 @@ class BKSLauncher:
         del self.simulations[sim_id]
         return True
 
-    def list_running(self):
-        """List all running simulations"""
-        print("Running BKS Simulations:")
-        if not self.simulations:
-            print("  None")
-        else:
-            for sim_id, info in self.simulations.items():
-                print(f"  {sim_id}: {info['device']} (temp: {info['temp_dir']})")
-
     def stop_all(self):
         """Stop all running simulations"""
         print("Stopping all simulations...")
@@ -188,6 +199,26 @@ class BKSLauncher:
         # Stop all simulations
         for sim_id in list(self.simulations.keys()):
             self.stop_bks_simulation(sim_id)
+
+    def get_last_log(self, sim_id: int) -> str | None:
+        if sim_id not in self.simulations:
+            print(f"Simulation '{sim_id}' not found")
+            return None
+
+        log_file = self.simulations[sim_id].get("log_file")
+        if not log_file or not os.path.exists(log_file):
+            print(f"Log file not found for simulation '{sim_id}'")
+            return None
+
+        try:
+            result = subprocess.run(
+                ["tail", "-n", str(1), log_file], capture_output=True, text=True
+            )
+            return result.stdout
+
+        except Exception as e:
+            print(f"Error reading log file: {e}")
+            return None
 
 
 # Convenience functions for direct use
@@ -208,11 +239,11 @@ def stop_bks_simulation(sim_id: int) -> bool:
     return _launcher.stop_bks_simulation(sim_id)
 
 
-def list_running():
-    """List all running simulations"""
-    _launcher.list_running()
-
-
 def stop_all():
     """Stop all running simulations"""
     _launcher.stop_all()
+
+
+def get_last_log(sim_id: int) -> str | None:
+    """Read the last log for a simulation"""
+    return _launcher.get_last_log(sim_id)

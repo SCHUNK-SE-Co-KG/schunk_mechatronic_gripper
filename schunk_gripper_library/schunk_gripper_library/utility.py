@@ -180,13 +180,6 @@ class ResponseExpectancyRequest(ModbusPDU):
         # Big-endian “HH”: sub-function, data field
         return struct.pack(">HH", self._sub_function, self.expectancy)
 
-    def decode(self, data: bytes) -> None:  # response → object fields
-        self._sub_function, self.expectancy = struct.unpack(">HH", data)
-
-    def get_response_pdu_size(self) -> int:
-        # Reply carries the same 4-byte body (sub-function + data)
-        return 4
-
 
 class Scanner(object):
     def __init__(self):
@@ -217,11 +210,15 @@ class Scanner(object):
             except Exception as e:
                 print(f"Warning: Failed to clear buffers: {e}")
 
-    def get_serial_number(self, slave: int) -> str | None:
+    def get_serial_number(self, dev_id: int) -> str | None:
         """Get the serial number of the gripper using the serial_no_num parameter."""
 
         # Clear buffer before every operation
         self.clear_buffer()
+
+        if not (0 <= dev_id <= 247):
+            print(f"Device ID must be between 0 and 247, got: {dev_id}")
+            return None
 
         if not self.client.connected:
             self.client.connect()
@@ -229,12 +226,12 @@ class Scanner(object):
 
         try:
             # Add retry mechanism for reliability
-            for attempt in range(3):
+            for _ in range(3):
                 result = self.client.read_holding_registers(
-                    address=0x1020 - 1, slave=slave, count=2
+                    address=0x1020 - 1, slave=dev_id, count=2
                 )
 
-                if not result.isError() and result.dev_id == slave:
+                if not result.isError() and result.dev_id == dev_id:
                     serial_num = (result.registers[0] << 16) | result.registers[1]
                     serial_hex_str = f"{serial_num:08X}"
                     return serial_hex_str
@@ -244,7 +241,7 @@ class Scanner(object):
             return None
 
         except Exception as e:
-            print(f"Error reading serial number from device {slave}: {e}")
+            print(f"Error reading serial number from device {dev_id}: {e}")
             return None
 
     def change_gripper_id_by_serial_num(self, serial_number: str, new_id: int) -> bool:
@@ -306,7 +303,7 @@ class Scanner(object):
             print(f"Error changing gripper ID by serial: {e}")
             return False
 
-    def set_expectancy(self, expectancy: int = 1, slave: int = 0) -> bool:
+    def set_expectancy(self, expectancy: int = 1, dev_id: int = 0) -> bool:
         """
         Set response expectancy for Modbus devices.
         Args:
@@ -320,21 +317,28 @@ class Scanner(object):
             print(f"Expectancy must be between 0 and 255, got: {expectancy}")
             return False
 
-        if not self.client.connect():
-            print("Failed to connect to serial port")
+        if not (0 <= dev_id <= 247):
+            print(f"Device ID must be between 0 and 247, got: {dev_id}")
             return False
 
+        if not self.client.connected:
+            try:
+                self.client.connect()
+                time.sleep(0.1)
+            except Exception:
+                return False
+
         try:
+            # TODO: add check for broadcast
             # Convert integer directly to hex (ResponseExpectancyRequest expects int)
-            req = ResponseExpectancyRequest(expectancy=expectancy, slave=slave)
+            req = ResponseExpectancyRequest(expectancy=expectancy, slave=dev_id)
             self.client.execute(request=req, no_response_expected=True)
-            print(f"Successfully set expectancy to {expectancy} (0x{expectancy:04X})")
             return True
         except Exception as e:
             print(f"Unexpected error sending expectancy command: {e}")
             return False
 
-    def change_gripper_id(self, old_id: int, new_id: int, check_success: bool = False):
+    def change_gripper_id(self, old_id: int, new_id: int):
         """
         Change the ID of the gripper by writing to a specific register.
         """
@@ -361,7 +365,7 @@ class Scanner(object):
             return False
 
     def assign_ids(
-        self, gripper_num: int, start_id: int = 20, universal_id: int = 10
+        self, gripper_num: int, start_id: int = 20, universal_id: int = 12
     ) -> bool:
         """
         Function to find grippers in the system and assign them individual IDs.
@@ -377,14 +381,12 @@ class Scanner(object):
         self.change_gripper_id(old_id=0, new_id=universal_id)
         time.sleep(0.2)
 
-        # self.clear_buffer()
-
+        # TODO: Adapt probability of response, maybe a simple algorithm
         # Set probability of response for all grippers
         # 5 => every fifth request will be received by the gripper
-        self.set_expectancy(expectancy=10, slave=0)  # Broadcast to all
+        self.set_expectancy(expectancy=10, dev_id=0)  # Broadcast to all
         time.sleep(0.2)
 
-        # self.clear_buffer()
         # Collect serial numbers and assign individual IDs
         grippers_found: list[dict] = []
         attempt = 0
@@ -404,7 +406,7 @@ class Scanner(object):
                 time.sleep(0.1)
 
             # Try to get serial number from universal ID
-            serial_number = self.get_serial_number(slave=universal_id)
+            serial_number = self.get_serial_number(dev_id=universal_id)
 
             if serial_number and isinstance(serial_number, str):
                 # Check if we already found this gripper
@@ -436,7 +438,7 @@ class Scanner(object):
 
                         if (gripper_num - len(grippers_found)) == 1:
                             self.set_expectancy(
-                                expectancy=1, slave=0
+                                expectancy=1, dev_id=0
                             )  # Set low expectancy for last gripper
 
             time.sleep(0.1)
