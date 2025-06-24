@@ -7,7 +7,6 @@ from .etc.scanner_helper import (
     stop_bks_simulation,
     stop_all,
     get_last_log,
-    ScannerTestSetup,
 )
 import time
 
@@ -131,7 +130,7 @@ def test_scanner_changes_id_using_grippers_serial_number(cleanup):
 
 @skip_without_bks
 def test_scanner_assigns_individual_ids(cleanup):
-    scanner = ScannerTestSetup()
+    scanner = Scanner()
 
     max_simulations = 3
     simulations = []
@@ -147,10 +146,11 @@ def test_scanner_assigns_individual_ids(cleanup):
         simulations.append(sim_id)
 
     start_time = time.perf_counter()
-    scanner.assign_ids(3, start_id=start_id)
+    scanner.assign_ids(max_simulations, start_id=start_id, lambda_target=3)
     end_time = time.perf_counter()
     execution_time = end_time - start_time
 
+    time.sleep(0.5)
     serial_nums = []
     for x in range(max_simulations):
         serial_num = scanner.get_serial_number(dev_id=start_id + x)

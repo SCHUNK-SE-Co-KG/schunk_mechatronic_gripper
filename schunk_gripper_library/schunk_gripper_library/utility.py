@@ -14,6 +14,7 @@ import struct
 from pymodbus.pdu import ModbusPDU
 from pymodbus.logging import Log
 import os
+import math
 import pymodbus.logging as logging
 import os
 import termios
@@ -341,87 +342,94 @@ class Scanner(object):
             return False
 
     def assign_ids(
-        self, gripper_num: int, start_id: int = 20, universal_id: int = 12
+        self,
+        gripper_num: int,
+        start_id: int = 20,
+        universal_id: int = 12,
+        lambda_target: float = 0.3,  # tune 0.2-0.5 to trade speed vs. collision risk
     ) -> bool:
         """
-        Function to find grippers in the system and assign them individual IDs.
-        This function will:
-        Args:
-            gripper_num: Number of grippers expected to be found
+        Discover every gripper still listening on `universal_id`
+        and give it a unique ID starting at `start_id`.
+
+        Parameters
+        ----------
+        gripper_num : int
+            How many grippers you expect to find.
+        start_id : int, default 20
+            First individual ID to assign.
+        universal_id : int, default 12
+            Temporary ID put on all grippers so they answer the same request.
+        lambda_target : float, default 0.4
+            Desired expected-answer rate (n/k). 0.2–0.5 works well.
         """
 
-        # Broadcast to change all IDs to a universal ID first
+        # 1. PUSH ALL GRIPPERS ONTO THE SAME ID
         self.client.retries = 0
-        print(f"Broadcasting ID change from 0 to {universal_id}")
-        self.change_gripper_id(old_id=0, new_id=universal_id)
+        print(f"Broadcasting: set ID → {universal_id} for all devices")
+        self.change_gripper_id(old_id=0, new_id=universal_id)  # broadcast
         time.sleep(0.2)
 
-        # TODO: Adapt probability of response, maybe a simple algorithm
-        # Set probability of response for all grippers
-        # 5 => every fifth request will be received by the gripper
-        self.set_expectancy(expectancy=10, dev_id=0)  # Broadcast to all
-        time.sleep(0.2)
-
-        # Collect serial numbers and assign individual IDs
         grippers_found: list[dict] = []
+        remaining = gripper_num
+        current_k: int | None = None
         attempt = 0
-        while True:
-            if len(grippers_found) >= gripper_num:
-                break
 
-            print(
-                f"Attempt {attempt + 1}: Looking for grippers with"
-                f"universal ID {universal_id}"
-            )
-            attempt += 1
+        while remaining > 0:
+            # 2. CHOOSE AN EXPECTANCY AND BROADCAST IT
+            k = max(1, math.ceil(remaining / lambda_target))
 
-            # Ensure connection is active
-            if not self.client.connected:
-                self.client.connect()
+            if remaining == 1:
+                k = 1
+
+            if k != current_k:
+                print(f"Broadcasting: set expectancy → {k} (n={remaining})")
+                self.set_expectancy(expectancy=k, dev_id=0)  # broadcast
+                current_k = k
                 time.sleep(0.1)
 
-            # Try to get serial number from universal ID
+            # 3. ASK “WHO HAS ID 12?” UNTIL WE GET *ONE* NEW SERIAL NUMBER
+            if not self.client.connected:
+                self.client.connect()
+                time.sleep(0.05)
+
+            attempt += 1
+            print(f"Request #{attempt} to ID {universal_id} (k={k})")
             serial_number = self.get_serial_number(dev_id=universal_id)
+            time.sleep(0.1)
 
-            if serial_number and isinstance(serial_number, str):
-                # Check if we already found this gripper
-                if serial_number not in [g["serial"] for g in grippers_found]:
-                    new_id = start_id + len(grippers_found)
-                    print(
-                        f"Found new gripper with serial {serial_number},"
-                        f"assigning ID {new_id}"
-                    )
-                    time.sleep(0.1)
-                    # Change this specific gripper's ID using its serial number
-                    success = self.change_gripper_id_by_serial_num(
-                        serial_number=serial_number, new_id=new_id
-                    )
+            # no answer
+            if not serial_number or not isinstance(serial_number, str):
+                # optional: back-off if bus is noisy / collision detected
+                continue
 
-                    if success:
-                        time.sleep(0.1)  # Small delay to ensure change takes effect
-                        grippers_found.append(
-                            {
-                                "serial": serial_number,
-                                "old_id": universal_id,
-                                "new_id": new_id,
-                            }
-                        )
-                        print(
-                            f"Successfully assigned ID {new_id}"
-                            f"to gripper {serial_number}"
-                        )
+            # duplicate (already processed)
+            if serial_number in (g["serial"] for g in grippers_found):
+                print(f"Duplicate answer from {serial_number} — ignored")
+                continue
 
-                        if (gripper_num - len(grippers_found)) == 1:
-                            self.set_expectancy(
-                                expectancy=1, dev_id=0
-                            )  # Set low expectancy for last gripper
+            new_id = start_id + len(grippers_found)
+            print(f"Assigning ID {new_id} to gripper {serial_number}")
+
+            success = self.change_gripper_id_by_serial_num(
+                serial_number=serial_number,
+                new_id=new_id,
+            )
+            time.sleep(0.1)
+
+            if not success:
+                print("⚠️  ID change failed — retrying")
+                continue
+
+            grippers_found.append(
+                {"serial": serial_number, "old_id": universal_id, "new_id": new_id}
+            )
+            remaining -= 1
 
             time.sleep(0.1)
 
-        if len(grippers_found) == gripper_num:
-            return True
-        else:
-            return False
+        self.set_expectancy(expectancy=1, dev_id=0)  # reset expectancy
+        return len(grippers_found) == gripper_num
 
 
 def gripper_available() -> bool:
