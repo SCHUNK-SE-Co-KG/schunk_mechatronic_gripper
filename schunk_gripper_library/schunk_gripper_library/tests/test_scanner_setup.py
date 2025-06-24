@@ -8,7 +8,6 @@ from .etc.scanner_helper import (
     get_last_log,
 )
 import time
-import pytest
 
 
 @skip_without_bks
@@ -66,8 +65,7 @@ def test_launcher_rejects_duplicate_serial_numbers(cleanup):
     assert start_bks_simulation(sim_id=sim_id_1, serial_num=serial_num)
     time.sleep(0.5)
 
-    with pytest.raises(ValueError):
-        start_bks_simulation(sim_id=sim_id_2, serial_num=serial_num)
+    assert not start_bks_simulation(sim_id=sim_id_2, serial_num=serial_num)
 
     assert stop_bks_simulation(sim_id=sim_id_1)
 
@@ -77,11 +75,13 @@ def test_launcher_rejects_invalid_device_index(cleanup):
     sim_id = 10
     serial_num = "00000010"
 
-    with pytest.raises(ValueError):
-        start_bks_simulation(sim_id=sim_id, serial_num=serial_num, device_index=-1)
+    assert not start_bks_simulation(
+        sim_id=sim_id, serial_num=serial_num, device_index=-1
+    )
 
-    with pytest.raises(ValueError):
-        start_bks_simulation(sim_id=sim_id, serial_num=serial_num, device_index=100)
+    assert not start_bks_simulation(
+        sim_id=sim_id, serial_num=serial_num, device_index=100
+    )
 
     assert stop_bks_simulation(sim_id=sim_id)
 

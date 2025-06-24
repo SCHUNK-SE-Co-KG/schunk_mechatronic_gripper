@@ -10,9 +10,6 @@ from .etc.scanner_helper import (
     ScannerTestSetup,
 )
 import time
-import pytest
-
-pytestmark = pytest.mark.no_bks
 
 
 # Bad case tests
@@ -38,22 +35,19 @@ def test_scanner_rejects_invalid_serial_number(cleanup):
 
     # Invalid serial numbers
     invalid_serial_too_many_chars = "0000000000000"
-    with pytest.raises(ValueError):
-        scanner.change_gripper_id_by_serial_num(
-            new_id=15, serial_number=invalid_serial_too_many_chars
-        )
+    assert not scanner.change_gripper_id_by_serial_num(
+        new_id=15, serial_number=invalid_serial_too_many_chars
+    )
 
     invalid_serial_too_few_chars = "000000"
-    with pytest.raises(ValueError):
-        scanner.change_gripper_id_by_serial_num(
-            new_id=15, serial_number=invalid_serial_too_few_chars
-        )
+    assert not scanner.change_gripper_id_by_serial_num(
+        new_id=15, serial_number=invalid_serial_too_few_chars
+    )
 
-    invalid_serial_invalid_chars = "0000001A"
-    with pytest.raises(ValueError):
-        scanner.change_gripper_id_by_serial_num(
-            new_id=15, serial_number=invalid_serial_invalid_chars
-        )
+    invalid_serial_invalid_chars = "00000#!$"
+    assert not scanner.change_gripper_id_by_serial_num(
+        new_id=15, serial_number=invalid_serial_invalid_chars
+    )
 
     stop_bks_simulation(sim_id=15)
 
@@ -127,10 +121,9 @@ def test_scanner_changes_id_using_grippers_serial_number(cleanup):
     serial = "00000019"  # Example serial number
     start_bks_simulation(sim_id=20, serial_num=serial)
     time.sleep(0.5)
-    scanner.get_serial_number(dev_id=20) == serial
 
     assert scanner.change_gripper_id_by_serial_num(serial_number=serial, new_id=25)
-
+    time.sleep(0.5)
     assert scanner.get_serial_number(dev_id=25) == serial
 
     stop_bks_simulation(sim_id=20)
@@ -153,7 +146,10 @@ def test_scanner_assigns_individual_ids(cleanup):
 
         simulations.append(sim_id)
 
+    start_time = time.perf_counter()
     scanner.assign_ids(3, start_id=start_id)
+    end_time = time.perf_counter()
+    execution_time = end_time - start_time
 
     serial_nums = []
     for x in range(max_simulations):
@@ -166,8 +162,4 @@ def test_scanner_assigns_individual_ids(cleanup):
 
     stop_all()
 
-    # cleanup to not effect other tests
-    scanner.change_serial_num(dev_id=0, serial_number="00000000")
-    time.sleep(0.5)
-    scanner.change_gripper_id_by_serial_num(serial_number="00000000", new_id=12)
-    time.sleep(0.5)
+    assert execution_time < 15

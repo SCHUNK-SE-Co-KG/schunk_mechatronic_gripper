@@ -195,26 +195,8 @@ class Scanner(object):
         self.client.set_max_no_responses(99999)  # Set a high limit for no responses
         self.client.connect()
 
-        self.clear_buffer()
-
-    def clear_buffer(self, delay: float = 0.2):
-        """Clear any stale data from the receive and transmit buffers"""
-        if self.client.socket and self.client.socket.is_open:
-            try:
-                self.client.socket.reset_input_buffer()
-                # Add a small delay between clearing input and output
-                time.sleep(0.05)
-                self.client.socket.reset_output_buffer()
-                if delay > 0:
-                    time.sleep(delay)
-            except Exception as e:
-                print(f"Warning: Failed to clear buffers: {e}")
-
     def get_serial_number(self, dev_id: int) -> str | None:
         """Get the serial number of the gripper using the serial_no_num parameter."""
-
-        # Clear buffer before every operation
-        self.clear_buffer()
 
         if not (0 <= dev_id <= 247):
             print(f"Device ID must be between 0 and 247, got: {dev_id}")
@@ -253,20 +235,16 @@ class Scanner(object):
         This uses a broadcast message with serial number targeting.
         """
         try:
-            self.clear_buffer()
+
             # Validate and convert hex string serial number to 4-byte integer
             if len(serial_number) != 8:
-                raise ValueError(
-                    f"Serial number must be 8 hex characters, got: {serial_number}"
-                )
+                return False
 
             # Convert hex string directly to integer
             try:
                 serial_hex = int(serial_number, 16)
             except ValueError:
-                raise ValueError(
-                    f"Serial number must be valid hex string, got: {serial_number}"
-                )
+                return False
 
             # Build payload according to the example format
             builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
@@ -294,7 +272,7 @@ class Scanner(object):
             )
 
             print(
-                f"Successfully sent ID change command for serial"
+                f"Successfully sent ID change command for serial "
                 f"{serial_number} to ID {new_id}"
             )
             return True
@@ -310,7 +288,6 @@ class Scanner(object):
             expectancy: Integer value (0-255) that will be converted to hex
             slave: Slave ID (0 for broadcast)
         """
-        self.clear_buffer()
 
         # Validate input range
         if not (0 <= expectancy <= 255):
@@ -344,7 +321,6 @@ class Scanner(object):
         """
 
         try:
-            self.clear_buffer()
 
             builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
             builder.add_8bit_uint(new_id)
@@ -373,7 +349,6 @@ class Scanner(object):
         Args:
             gripper_num: Number of grippers expected to be found
         """
-        self.clear_buffer()
 
         # Broadcast to change all IDs to a universal ID first
         self.client.retries = 0

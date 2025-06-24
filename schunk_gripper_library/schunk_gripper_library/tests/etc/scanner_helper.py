@@ -31,19 +31,15 @@ class ScannerTestSetup(Scanner):
             serial_number: Serial number as hex string (e.g., "12345678")
         Note: This may not work if the register is read-only.
         """
-        self.clear_buffer()
+
         if len(serial_number) != 8:
-            raise ValueError(
-                f"Serial number must be 8 hex characters, got: {serial_number}"
-            )
+            return False
 
         if not all(c in "0123456789abcdefABCDEF" for c in serial_number):
-            raise ValueError(
-                f"Serial number must be valid hex string, got: {serial_number}"
-            )
+            return False
 
         if not (0 <= dev_id <= 247):
-            raise ValueError(f"Device ID must be between 0 and 247, got: {dev_id}")
+            return False
 
         try:
             print(f"Changing serial number for device {dev_id} to {serial_number}")
@@ -60,15 +56,16 @@ class ScannerTestSetup(Scanner):
             register_address = 0x1020 - 1
 
             response = self.client.write_registers(
-                register_address, payload, slave=dev_id, no_response_expected=True
+                register_address, payload, slave=dev_id
             )
             print(f"Successfully changed gripper serial number to {serial_number}")
-            print(response)
+            print(f"Response: {response}")
 
             return True
 
         except Exception as e:
             print(f"Unexpected error changing serial number: {e}")
+
             return False
 
 
@@ -94,14 +91,10 @@ class BKSLauncher:
             return False
 
         if serial_num is None or len(serial_num) != 8:
-            raise ValueError(
-                f"Invalid serial number '{serial_num}'. Must be 8 hex characters."
-            )
+            return False
 
         if serial_num in [sim["serial_num"] for sim in self.simulations.values()]:
-            raise ValueError(
-                f"Serial number '{serial_num}' is already in use by another simulation."
-            )
+            return False
 
         fake_dev = f"/dev/ttypts2fake{device_index}"
         if not os.path.exists(fake_dev):
