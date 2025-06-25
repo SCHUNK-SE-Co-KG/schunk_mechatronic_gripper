@@ -208,18 +208,14 @@ class Scanner(object):
             time.sleep(0.1)
 
         try:
-            # Add retry mechanism for reliability
-            for _ in range(3):
-                result = self.client.read_holding_registers(
-                    address=0x1020 - 1, slave=dev_id, count=2
-                )
+            result = self.client.read_holding_registers(
+                address=0x1020 - 1, slave=dev_id, count=2
+            )
 
-                if not result.isError() and result.dev_id == dev_id:
-                    serial_num = (result.registers[0] << 16) | result.registers[1]
-                    serial_hex_str = f"{serial_num:08X}"
-                    return serial_hex_str
-
-                time.sleep(0.2)  # Wait between attempts
+            if not result.isError() and result.dev_id == dev_id:
+                serial_num = (result.registers[0] << 16) | result.registers[1]
+                serial_hex_str = f"{serial_num:08X}"
+                return serial_hex_str
 
             return None
 
@@ -236,7 +232,6 @@ class Scanner(object):
         This uses a broadcast message with serial number targeting.
         """
         try:
-
             # Validate and convert hex string serial number to 4-byte integer
             if len(serial_number) != 8:
                 return False
@@ -307,7 +302,6 @@ class Scanner(object):
                 return False
 
         try:
-            # TODO: add check for broadcast
             # Convert integer directly to hex (ResponseExpectancyRequest expects int)
             req = ResponseExpectancyRequest(expectancy=expectancy, slave=dev_id)
             self.client.execute(request=req, no_response_expected=True)
@@ -320,9 +314,7 @@ class Scanner(object):
         """
         Change the ID of the gripper by writing to a specific register.
         """
-
         try:
-
             builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
             builder.add_8bit_uint(new_id)
             payload = builder.to_registers()
@@ -400,7 +392,6 @@ class Scanner(object):
 
             # no answer
             if not serial_number or not isinstance(serial_number, str):
-                # optional: back-off if bus is noisy / collision detected
                 continue
 
             # duplicate (already processed)
