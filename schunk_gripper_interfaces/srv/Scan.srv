@@ -1,0 +1,8 @@
+# Request
+int32 num_devices  # Number of devices to scan for
+
+---
+
+# Response
+bool success       # True if scanning was successful
+string message     # Optional status message
