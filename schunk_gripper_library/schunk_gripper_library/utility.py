@@ -207,21 +207,16 @@ class Scanner(object):
             self.client.connect()
             time.sleep(0.1)
 
-        try:
-            result = self.client.read_holding_registers(
-                address=0x1020 - 1, slave=dev_id, count=2
-            )
+        result = self.client.read_holding_registers(
+            address=0x1020 - 1, slave=dev_id, count=2
+        )
 
-            if not result.isError() and result.dev_id == dev_id:
-                serial_num = (result.registers[0] << 16) | result.registers[1]
-                serial_hex_str = f"{serial_num:08X}"
-                return serial_hex_str
+        if not result.isError() and result.dev_id == dev_id:
+            serial_num = (result.registers[0] << 16) | result.registers[1]
+            serial_hex_str = f"{serial_num:08X}"
+            return serial_hex_str
 
-            return None
-
-        except Exception as e:
-            print(f"Error reading serial number from device {dev_id}: {e}")
-            return None
+        return None
 
     def change_gripper_id_by_serial_num(self, serial_number: str, new_id: int) -> bool:
         """
@@ -231,51 +226,46 @@ class Scanner(object):
             new_id: New device ID to assign
         This uses a broadcast message with serial number targeting.
         """
-        try:
-            # Validate and convert hex string serial number to 4-byte integer
-            if len(serial_number) != 8:
-                return False
-
-            # Convert hex string directly to integer
-            try:
-                serial_hex = int(serial_number, 16)
-            except ValueError:
-                return False
-
-            # Build payload according to the example format
-            builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
-
-            # Add new slave ID (1 byte)
-            builder.add_8bit_uint(new_id)
-            builder.add_8bit_uint(0x00)  # Padding
-
-            # Add new slave ID again (2 bytes)
-            builder.add_16bit_uint(new_id)
-
-            # Add serial number (4 bytes)
-            builder.add_32bit_uint(serial_hex)
-
-            # Add padding (4 bytes of 0xFF)
-            for _ in range(4):
-                builder.add_8bit_uint(0xFF)
-
-            payload = builder.to_registers()
-            register_address = 0x11A7
-
-            # Use broadcast (slave ID 0) to send to all grippers
-            self.client.write_registers(
-                register_address, payload, slave=0, no_response_expected=True
-            )
-
-            print(
-                f"Successfully sent ID change command for serial "
-                f"{serial_number} to ID {new_id}"
-            )
-            return True
-
-        except Exception as e:
-            print(f"Error changing gripper ID by serial: {e}")
+        # Validate and convert hex string serial number to 4-byte integer
+        if len(serial_number) != 8:
             return False
+
+        # Convert hex string directly to integer
+        try:
+            serial_hex = int(serial_number, 16)
+        except ValueError:
+            return False
+
+        # Build payload according to the example format
+        builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
+
+        # Add new slave ID (1 byte)
+        builder.add_8bit_uint(new_id)
+        builder.add_8bit_uint(0x00)  # Padding
+
+        # Add new slave ID again (2 bytes)
+        builder.add_16bit_uint(new_id)
+
+        # Add serial number (4 bytes)
+        builder.add_32bit_uint(serial_hex)
+
+        # Add padding (4 bytes of 0xFF)
+        for _ in range(4):
+            builder.add_8bit_uint(0xFF)
+
+        payload = builder.to_registers()
+        register_address = 0x11A7
+
+        # Use broadcast (slave ID 0) to send to all grippers
+        self.client.write_registers(
+            register_address, payload, slave=0, no_response_expected=True
+        )
+
+        print(
+            f"Successfully sent ID change command for serial "
+            f"{serial_number} to ID {new_id}"
+        )
+        return True
 
     def set_expectancy(self, expectancy: int = 1, dev_id: int = 0) -> bool:
         """
@@ -295,43 +285,32 @@ class Scanner(object):
             return False
 
         if not self.client.connected:
-            try:
-                self.client.connect()
-                time.sleep(0.1)
-            except Exception:
+            if not self.client.connect():
                 return False
+            time.sleep(0.1)
 
-        try:
-            # Convert integer directly to hex (ResponseExpectancyRequest expects int)
-            req = ResponseExpectancyRequest(expectancy=expectancy, slave=dev_id)
-            self.client.execute(request=req, no_response_expected=True)
-            return True
-        except Exception as e:
-            print(f"Unexpected error sending expectancy command: {e}")
-            return False
+        # Convert integer directly to hex (ResponseExpectancyRequest expects int)
+        req = ResponseExpectancyRequest(expectancy=expectancy, slave=dev_id)
+        self.client.execute(request=req, no_response_expected=True)
+        return True
 
     def change_gripper_id(self, old_id: int, new_id: int):
         """
         Change the ID of the gripper by writing to a specific register.
         """
-        try:
-            builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
-            builder.add_8bit_uint(new_id)
-            payload = builder.to_registers()
-            register_address = 0x11A7
+        builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
+        builder.add_8bit_uint(new_id)
+        payload = builder.to_registers()
+        register_address = 0x11A7
 
-            self.client.retries = 0
-            response = self.client.write_registers(
-                register_address, payload, slave=old_id, no_response_expected=True
-            )
-            print("Successfully changed gripper ID to ", new_id)
-            print(response)
+        self.client.retries = 0
+        response = self.client.write_registers(
+            register_address, payload, slave=old_id, no_response_expected=True
+        )
+        print("Successfully changed gripper ID to ", new_id)
+        print(response)
 
-            return True
-
-        except Exception as e:
-            print(f"Unexpected error sending broadcast message: {e}")
-            return False
+        return True
 
     def assign_ids(
         self,
@@ -409,7 +388,7 @@ class Scanner(object):
             time.sleep(0.1)
 
             if not success:
-                print("⚠️  ID change failed — retrying")
+                print("ID change failed — retrying")
                 continue
 
             grippers_found.append(
