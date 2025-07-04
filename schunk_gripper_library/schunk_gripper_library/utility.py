@@ -9,15 +9,15 @@ import pytest
 from pymodbus.client.serial import ModbusSerialClient
 from pymodbus.payload import BinaryPayloadBuilder
 from pymodbus.constants import Endian
+from pymodbus.exceptions import ModbusIOException
 import serial
 import struct
 from pymodbus.pdu import ModbusPDU
 from pymodbus.logging import Log
 import os
 import math
-import pymodbus.logging as logging
-import os
 import termios
+
 
 def supports_parity(serial_port: str) -> bool:
     fd = None
@@ -33,7 +33,8 @@ def supports_parity(serial_port: str) -> bool:
     finally:
         if fd is not None:
             os.close(fd)
-            
+
+
 class NonExclusiveSerialClient(ModbusSerialClient):
     def connect(self) -> bool:
         """
@@ -188,7 +189,7 @@ class Scanner(object):
             port="/dev/ttyUSB0",
             baudrate=115200,
             timeout=0.1,
-            parity="N",
+            parity="E" if supports_parity("/dev/ttyUSB0") else "N",
             stopbits=1,
             bytesize=8,
             retries=0,
@@ -198,25 +199,29 @@ class Scanner(object):
 
     def get_serial_number(self, dev_id: int) -> str | None:
         """Get the serial number of the gripper using the serial_no_num parameter."""
+        try:
+            if not (0 <= dev_id <= 247):
+                print(f"Device ID must be between 0 and 247, got: {dev_id}")
+                return None
 
-        if not (0 <= dev_id <= 247):
-            print(f"Device ID must be between 0 and 247, got: {dev_id}")
+            if not self.client.connected:
+                self.client.connect()
+                time.sleep(0.1)
+
+            result = self.client.read_holding_registers(
+                address=0x1020 - 1, slave=dev_id, count=2
+            )
+
+            if not result.isError() and result.dev_id == dev_id:
+                serial_num = (result.registers[0] << 16) | result.registers[1]
+                serial_hex_str = f"{serial_num:08X}"
+                return serial_hex_str
+
             return None
-
-        if not self.client.connected:
-            self.client.connect()
-            time.sleep(0.1)
-
-        result = self.client.read_holding_registers(
-            address=0x1020 - 1, slave=dev_id, count=2
-        )
-
-        if not result.isError() and result.dev_id == dev_id:
-            serial_num = (result.registers[0] << 16) | result.registers[1]
-            serial_hex_str = f"{serial_num:08X}"
-            return serial_hex_str
-
-        return None
+        except ModbusIOException:
+            # Modbus throws an exception if the device
+            # is not responding the wrong device responds
+            return None
 
     def change_gripper_id_by_serial_num(self, serial_number: str, new_id: int) -> bool:
         """
