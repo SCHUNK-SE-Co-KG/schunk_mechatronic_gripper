@@ -201,7 +201,7 @@ class Scanner(object):
         """Get the serial number of the gripper using the serial_no_num parameter."""
         try:
             if not (0 <= dev_id <= 247):
-                print(f"Device ID must be between 0 and 247, got: {dev_id}")
+                Log.warning(f"Device ID must be between 0 and 247, got: {dev_id}")
                 return None
 
             if not self.client.connected:
@@ -235,11 +235,12 @@ class Scanner(object):
         if len(serial_number) != 8:
             return False
 
-        # Convert hex string directly to integer
-        try:
-            serial_hex = int(serial_number, 16)
-        except ValueError:
+        if not all(c in "0123456789ABCDEF" for c in serial_number.upper()):
+            Log.warning(f"Invalid serial number format: {serial_number}")
             return False
+
+        # Convert hex string directly to integer
+        serial_hex = int(serial_number, 16)
 
         # Build payload according to the example format
         builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
@@ -266,7 +267,7 @@ class Scanner(object):
             register_address, payload, slave=0, no_response_expected=True
         )
 
-        print(
+        Log.debug(
             f"Successfully sent ID change command for serial "
             f"{serial_number} to ID {new_id}"
         )
@@ -282,11 +283,11 @@ class Scanner(object):
 
         # Validate input range
         if not (0 <= expectancy <= 255):
-            print(f"Expectancy must be between 0 and 255, got: {expectancy}")
+            Log.warning(f"Expectancy must be between 0 and 255, got: {expectancy}")
             return False
 
         if not (0 <= dev_id <= 247):
-            print(f"Device ID must be between 0 and 247, got: {dev_id}")
+            Log.warning(f"Device ID must be between 0 and 247, got: {dev_id}")
             return False
 
         if not self.client.connected:
@@ -309,11 +310,10 @@ class Scanner(object):
         register_address = 0x11A7
 
         self.client.retries = 0
-        response = self.client.write_registers(
+        self.client.write_registers(
             register_address, payload, slave=old_id, no_response_expected=True
         )
-        print("Successfully changed gripper ID to ", new_id)
-        print(response)
+        Log.debug("Successfully changed gripper ID to ", new_id)
 
         return True
 
@@ -342,7 +342,7 @@ class Scanner(object):
 
         # 1. PUSH ALL GRIPPERS ONTO THE SAME ID
         self.client.retries = 0
-        print(f"Broadcasting: set ID → {universal_id} for all devices")
+        Log.debug(f"Broadcasting: set ID → {universal_id} for all devices")
         self.change_gripper_id(old_id=0, new_id=universal_id)  # broadcast
         time.sleep(0.2)
 
@@ -359,7 +359,7 @@ class Scanner(object):
                 k = 1
 
             if k != current_k:
-                print(f"Broadcasting: set expectancy → {k} (n={remaining})")
+                Log.debug(f"Broadcasting: set expectancy → {k} (n={remaining})")
                 self.set_expectancy(expectancy=k, dev_id=0)  # broadcast
                 current_k = k
                 time.sleep(0.1)
@@ -370,7 +370,7 @@ class Scanner(object):
                 time.sleep(0.05)
 
             attempt += 1
-            print(f"Request #{attempt} to ID {universal_id} (k={k})")
+            Log.debug(f"Request #{attempt} to ID {universal_id} (k={k})")
             serial_number = self.get_serial_number(dev_id=universal_id)
             time.sleep(0.1)
 
@@ -380,11 +380,11 @@ class Scanner(object):
 
             # duplicate (already processed)
             if serial_number in (g["serial"] for g in grippers_found):
-                print(f"Duplicate answer from {serial_number} — ignored")
+                Log.debug(f"Duplicate answer from {serial_number} — ignored")
                 continue
 
             new_id = start_id + len(grippers_found)
-            print(f"Assigning ID {new_id} to gripper {serial_number}")
+            Log.debug(f"Assigning ID {new_id} to gripper {serial_number}")
 
             success = self.change_gripper_id_by_serial_num(
                 serial_number=serial_number,
@@ -393,7 +393,7 @@ class Scanner(object):
             time.sleep(0.1)
 
             if not success:
-                print("ID change failed — retrying")
+                Log.debug("ID change failed — retrying")
                 continue
 
             grippers_found.append(
