@@ -14,7 +14,6 @@ from functools import partial
 from pymodbus.logging import Log
 import serial  # type: ignore [import-untyped]
 from pymodbus.exceptions import ModbusIOException
-from enum import Enum
 
 
 class NonExclusiveSerialClient(ModbusSerialClient):
@@ -488,7 +487,7 @@ class Driver(object):
             return abs(still_to_go) / (ratio * self.module_parameters["max_grp_vel"])
         return 0.0
 
-    async def jog_positive(self, velocity: int) -> bool:
+    def jog_positive(self, velocity: int, gpe: bool = False) -> bool:
         if not self.connected:
             return False
 
@@ -497,15 +496,21 @@ class Driver(object):
 
         cmd_toggle_before = self.get_status_bit(bit=5)
         self.set_control_bit(bit=9, value=True)
-        self.set_control_bit(bit=31, value=True)
+
+        if gpe:
+            self.set_control_bit(bit=31, value=self.gpe_available())
+        else:
+            self.set_control_bit(bit=31, value=False)
+
         self.set_target_speed(velocity)
 
         self.send_plc_output()
+
         desired_bits = {"5": cmd_toggle_before ^ 1}
 
-        return await self.wait_for_status(bits=desired_bits)
+        return self.wait_for_status(bits=desired_bits)
 
-    async def jog_negative(self, velocity: int) -> bool:
+    def jog_negative(self, velocity: int, gpe: bool = False) -> bool:
         if not self.connected:
             return False
 
@@ -513,18 +518,23 @@ class Driver(object):
         self.send_plc_output()
 
         cmd_toggle_before = self.get_status_bit(bit=5)
+
+        self.set_control_bit(bit=9, value=False)
         self.set_control_bit(bit=8, value=True)
-        self.set_control_bit(bit=31, value=True)
+
+        if gpe:
+            self.set_control_bit(bit=31, value=self.gpe_available())
+        else:
+            self.set_control_bit(bit=31, value=False)
+
         self.set_target_speed(velocity)
 
         self.send_plc_output()
-        # desired_bits = {"5": cmd_toggle_before ^ 1}
-        # desired_bits_reset_jog = {"5": cmd_toggle_before ^ 1, "13": 1}
-        desired_bits_reaching_limit = {"5": cmd_toggle_before ^ 1, "13": 1, "4": 1}
 
-        return await self.wait_for_status(bits=desired_bits_reaching_limit)
+        desired_bits = {"5": cmd_toggle_before ^ 1}
+        return self.wait_for_status(bits=desired_bits)
 
-    async def reset_jog(self) -> bool:
+    def reset_jog(self) -> bool:
         if not self.connected:
             return False
 
@@ -539,7 +549,7 @@ class Driver(object):
         self.send_plc_output()
         desired_bits = {"5": cmd_toggle_before ^ 1, "13": 1}
 
-        return await self.wait_for_status(bits=desired_bits)
+        return self.wait_for_status(bits=desired_bits, timeout_sec=2)
 
     def receive_plc_input(self) -> bool:
         with self.input_buffer_lock:
