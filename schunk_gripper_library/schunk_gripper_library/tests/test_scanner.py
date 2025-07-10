@@ -136,6 +136,7 @@ def test_scanner_assigns_individual_ids(cleanup):
     simulations = []
     start_id = 30
 
+    # Start multiple grippers
     for i in range(max_simulations):
         sim_id = 20 + i
         init_serial_num = f"000000{sim_id:02d}"
@@ -145,12 +146,14 @@ def test_scanner_assigns_individual_ids(cleanup):
 
         simulations.append(sim_id)
 
+    # Assign new IDs to the grippers
     start_time = time.perf_counter()
-    scanner.assign_ids(max_simulations, start_id=start_id, lambda_target=3)
+    scanner.scan(max_simulations, start_id=start_id, lambda_target=0.3)
     end_time = time.perf_counter()
     execution_time = end_time - start_time
-
     time.sleep(0.5)
+
+    # Verify that the serial numbers are unique and match the assigned IDs
     serial_nums = []
     for x in range(max_simulations):
         serial_num = scanner.get_serial_number(dev_id=start_id + x)
@@ -163,3 +166,27 @@ def test_scanner_assigns_individual_ids(cleanup):
     stop_all()
 
     assert execution_time < 15
+
+
+@skip_without_bks
+def test_scan_returns_list_of_devices(cleanup):
+    scanner = Scanner()
+
+    # No grippers
+    device_ids = scanner.scan(gripper_num=0)
+    assert len(device_ids) == 0
+
+    # Multiple grippers
+    num_grippers = 2
+    for i in range(num_grippers):
+        sim_id = 20 + i
+        init_serial_num = f"000000{sim_id:02d}"
+        start_bks_simulation(sim_id=sim_id, serial_num=init_serial_num, device_index=i)
+        time.sleep(0.5)
+
+    device_ids = scanner.scan(gripper_num=num_grippers, lambda_target=0.3)
+    assert len(device_ids) == num_grippers
+
+    assert all(isinstance(dev_id, int) for dev_id in device_ids)
+
+    stop_all()

@@ -112,7 +112,9 @@ class Driver(Node):
         # Node parameters
         self.declare_parameter("log_level", "INFO")
 
-        self.scanner: Scanner = Scanner()
+        self.scanner: Scanner = Scanner(
+            serial_port=self.get_parameter("serial_port").value
+        )
         self.scheduler: Scheduler = Scheduler()
         self.gripper_services: list[Service] = []
         self.joint_state_publishers: dict[str, Publisher] = {}
@@ -759,10 +761,20 @@ class Driver(Node):
     def _scan_cb(self, request: Scan.Request, response: Scan.Response):
         self.get_logger().debug(f"---> Scanning for {request.num_devices} devices")
         try:
-            response.success = self.scanner.assign_ids(request.num_devices)
+            device_ids = self.scanner.scan(request.num_devices)
+            response.success = (
+                True if isinstance(device_ids, list) and len(device_ids) > 0 else False
+            )
+
             if response.success:
+                for id in device_ids:
+                    self.add_gripper(
+                        serial_port=self.get_parameter("serial_port").value,
+                        device_id=id,
+                    )
+
                 response.message = f"Successfully scanned and assigned \
-                    IDs to {request.num_devices} devices"
+                    IDs to {len(device_ids)} devices. IDs: {device_ids}"
             else:
                 response.message = f"Failed to scan for {request.num_devices} devices"
         except Exception as e:

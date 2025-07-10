@@ -184,12 +184,12 @@ class ResponseExpectancyRequest(ModbusPDU):
 
 
 class Scanner(object):
-    def __init__(self):
+    def __init__(self, serial_port: str = "/dev/ttyUSB0") -> None:
         self.client = NonExclusiveSerialClient(
-            port="/dev/ttyUSB0",
+            port=serial_port,
             baudrate=115200,
             timeout=0.1,
-            parity="E" if supports_parity("/dev/ttyUSB0") else "N",
+            parity="E" if supports_parity(serial_port) else "N",
             stopbits=1,
             bytesize=8,
             retries=0,
@@ -317,13 +317,13 @@ class Scanner(object):
 
         return True
 
-    def assign_ids(
+    def scan(
         self,
         gripper_num: int,
         start_id: int = 20,
         universal_id: int = 12,
         lambda_target: float = 0.3,  # tune 0.2-0.5 to trade speed vs. collision risk
-    ) -> bool:
+    ) -> list[int]:
         """
         Discover every gripper still listening on `universal_id`
         and give it a unique ID starting at `start_id`.
@@ -337,22 +337,26 @@ class Scanner(object):
         universal_id : int, default 12
             Temporary ID put on all grippers so they answer the same request.
         lambda_target : float, default 0.4
-            Desired expected-answer rate (n/k). 0.2–0.5 works well.
+            Desired expected-answer rate (n/k). 0.2-0.5 works well.
         """
 
-        # 1. PUSH ALL GRIPPERS ONTO THE SAME ID
+        if gripper_num == 0:
+            return []
+
+        # 1. push all grippers to the universal ID
         self.client.retries = 0
         Log.debug(f"Broadcasting: set ID → {universal_id} for all devices")
         self.change_gripper_id(old_id=0, new_id=universal_id)  # broadcast
         time.sleep(0.2)
 
         grippers_found: list[dict] = []
+        gripper_ids: list[int] = []  # can make this an attribute if needed
         remaining = gripper_num
         current_k: int | None = None
         attempt = 0
 
         while remaining > 0:
-            # 2. CHOOSE AN EXPECTANCY AND BROADCAST IT
+            # 2. choose an expectancy and broadcast it
             k = max(1, math.ceil(remaining / lambda_target))
 
             if remaining == 1:
@@ -364,7 +368,7 @@ class Scanner(object):
                 current_k = k
                 time.sleep(0.1)
 
-            # 3. ASK “WHO HAS ID 12?” UNTIL WE GET *ONE* NEW SERIAL NUMBER
+            # 3. ask "who has ID 12?" until we get *one* serial number
             if not self.client.connected:
                 self.client.connect()
                 time.sleep(0.05)
@@ -399,12 +403,13 @@ class Scanner(object):
             grippers_found.append(
                 {"serial": serial_number, "old_id": universal_id, "new_id": new_id}
             )
+            gripper_ids.append(new_id)
             remaining -= 1
 
             time.sleep(0.1)
 
         self.set_expectancy(expectancy=1, dev_id=0)  # reset expectancy
-        return len(grippers_found) == gripper_num
+        return gripper_ids
 
 
 def gripper_available() -> bool:
@@ -429,15 +434,14 @@ skip_without_gripper = pytest.mark.skipif(
 def skip_without_bks(func):
     def check_bks_available():
         # Check if BKS_SIMULATION_PATH is set
-        if not os.getenv("BKS_SIMULATION_PATH"):
+        bks_path = os.getenv("BKS_SIMULATION_PATH")
+        if not bks_path:
             return False, "BKS_SIMULATION_PATH environment variable not set"
 
         # Check if the BKS simulation executable exists
-        bks_path = os.path.join(
-            os.getenv("BKS_SIMULATION_PATH"), "BKS_Simulation_Windows"
-        )
-        if not os.path.exists(bks_path):
-            return False, f"BKS simulation executable not found at {bks_path}"
+        bks_exe_path = os.path.join(bks_path, "BKS_Simulation_Windows")
+        if not os.path.exists(bks_exe_path):
+            return False, f"BKS simulation executable not found at {bks_exe_path}"
 
         # Check if tty_bus socket exists (infrastructure running)
         tty_bus_socket = "/tmp/ttypts2mux"
@@ -447,6 +451,10 @@ def skip_without_bks(func):
         # Check if /dev/ttyUSB0 is available
         if not os.path.exists("/dev/ttyUSB0"):
             return False, "Virtual serial device /dev/ttyUSB0 not available"
+
+        # Check if at least one fake device exists
+        if not os.path.exists("/dev/ttypts2fake0"):
+            return False, "No fake TTY devices available for BKS simulation"
 
         return True, "BKS infrastructure available"
 
