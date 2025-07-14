@@ -104,13 +104,51 @@ class BKSLauncher:
             )
             return False
 
+        if not SIM_PATH:
+            return False
+
         sim_temp_dir = tempfile.mkdtemp(prefix=f"bks_sim_{sim_id}_")
         log_file = os.path.join(sim_temp_dir, f"bks_sim_{sim_id}.log")
         print(f"Starting BKS simulation '{sim_id}' on {fake_dev} in {sim_temp_dir}...")
 
-        sim_cmd = (
-            f'"{SIM_PATH}/BKS_Simulation_Windows" EGK_40_M_B -p "{fake_dev}" -c none'
-        )
+        try:
+            # Copy flash device directory
+            flash_device_src = os.path.join(
+                SIM_PATH, "flash_devices", "EGK_40_M_B_flash_device"
+            )
+            flash_device_dest = os.path.join(sim_temp_dir, "EGK_40_M_B_flash_device")
+
+            if not os.path.exists(flash_device_src) or not os.access(
+                flash_device_src, os.R_OK
+            ):
+                subprocess.run(["rm", "-rf", sim_temp_dir], check=False)
+                return False
+
+            subprocess.run(
+                ["cp", "-r", flash_device_src, flash_device_dest], check=True
+            )
+
+            # Copy BKS_SIMULATION executable
+            bks_simulation_src = os.path.join(SIM_PATH, "BKS_Simulation_Windows")
+            bks_simulation_dest = os.path.join(sim_temp_dir, "BKS_Simulation_Windows")
+
+            if not os.path.exists(bks_simulation_src) or not os.access(
+                bks_simulation_src, os.R_OK
+            ):
+                subprocess.run(["rm", "-rf", sim_temp_dir], check=False)
+                return False
+
+            subprocess.run(
+                ["cp", "-r", bks_simulation_src, bks_simulation_dest], check=True
+            )
+
+        except subprocess.CalledProcessError:
+            subprocess.run(["rm", "-rf", sim_temp_dir], check=False)
+            return False
+
+        # Use the copied BKS_Simulation_Windows executable
+        sim_cmd = f'"{sim_temp_dir}/BKS_Simulation_Windows" \
+            EGK_40_M_B -p "{fake_dev}" -c none'
 
         # Redirect output to log file
         full_cmd = (

@@ -148,7 +148,7 @@ def test_scanner_assigns_individual_ids(cleanup):
 
     # Assign new IDs to the grippers
     start_time = time.perf_counter()
-    scanner.scan(max_simulations, start_id=start_id, lambda_target=0.3)
+    scanner.scan(max_simulations, start_id=start_id, expected_response_rate=0.3)
     end_time = time.perf_counter()
     execution_time = end_time - start_time
     time.sleep(0.5)
@@ -184,7 +184,7 @@ def test_scan_returns_list_of_devices(cleanup):
         start_bks_simulation(sim_id=sim_id, serial_num=init_serial_num, device_index=i)
         time.sleep(0.5)
 
-    device_ids = scanner.scan(gripper_num=num_grippers, lambda_target=0.3)
+    device_ids = scanner.scan(gripper_num=num_grippers, expected_response_rate=0.3)
     assert len(device_ids) == num_grippers
 
     assert all(isinstance(dev_id, int) for dev_id in device_ids)
