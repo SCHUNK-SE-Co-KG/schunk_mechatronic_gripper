@@ -13,14 +13,14 @@ import time
 
 # Bad case tests
 @skip_without_bks
-def test_scanner_returns_no_serial_number_for_invalid_id(cleanup):
+def test_scanner_returns_no_serial_number_for_invalid_id():
     scanner = Scanner()
     invalid_id = 9999
     assert scanner.get_serial_number(dev_id=invalid_id) is None
 
 
 @skip_without_bks
-def test_scanner_returns_no_serial_number_for_non_existent_id(cleanup):
+def test_scanner_returns_no_serial_number_for_non_existent_id():
     scanner = Scanner()
     non_existent_id = 40
     assert scanner.get_serial_number(dev_id=non_existent_id) is None
@@ -49,6 +49,21 @@ def test_scanner_rejects_invalid_serial_number(cleanup):
     )
 
     stop_bks_simulation(sim_id=15)
+
+
+@skip_without_bks
+def test_scanner_changes_gripper_id(cleanup):
+    scanner = Scanner()
+    sim_id = 18
+    serial_num = "00000018"
+    start_bks_simulation(sim_id=sim_id, serial_num=serial_num)
+
+    time.sleep(0.5)
+
+    assert scanner.change_gripper_id(old_id=sim_id, new_id=20)
+
+    assert scanner.get_serial_number(dev_id=20) == serial_num
+    stop_bks_simulation(sim_id=18)
 
 
 @skip_without_bks
@@ -81,7 +96,7 @@ def test_scanner_connects_automatically(cleanup):
 
 
 @skip_without_bks
-def test_scanner_offers_serial_number(cleanup):
+def test_scanner_offers_reading_serial_number(cleanup):
     scanner = Scanner()
     serial = "00000013"  # Example serial number
     start_bks_simulation(sim_id=13, serial_num=serial)

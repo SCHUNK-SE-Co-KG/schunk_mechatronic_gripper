@@ -45,6 +45,7 @@ def test_driver_advertises_state_depending_services(lifecycle_interface):
         "/schunk/driver/show_configuration",
         "/schunk/driver/save_configuration",
         "/schunk/driver/load_previous_configuration",
+        "/schunk/driver/scan",
     ]
     gripper_services = [
         "acknowledge",

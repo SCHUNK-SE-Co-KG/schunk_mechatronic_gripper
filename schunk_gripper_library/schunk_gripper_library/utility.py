@@ -336,7 +336,7 @@ class Scanner(object):
             First individual ID to assign.
         universal_id : int, default 12
             Temporary ID put on all grippers so they answer the same request.
-        expected_response_rate : float, default 0.4
+        expected_response_rate : float, default 0.3
             Desired expected-answer rate (n/k). 0.2-0.5 works well.
         """
 

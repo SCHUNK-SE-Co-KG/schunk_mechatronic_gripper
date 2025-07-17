@@ -140,7 +140,6 @@ class Driver(Node):
             "~/load_previous_configuration",
             self._load_previous_configuration_cb,
         )
-        self.scan_srv = self.create_service(Trigger, "~/scan", self._scan_cb)
         self.scan_srv = self.create_service(Scan, "~/scan", self._scan_cb)
         self.add_on_set_parameters_callback(self._param_cb)
 
@@ -380,6 +379,7 @@ class Driver(Node):
         self.destroy_service(self.show_configuration_srv)
         self.destroy_service(self.save_configuration_srv)
         self.destroy_service(self.load_previous_configuration_srv)
+        self.destroy_service(self.scan_srv)
 
         if self.headless:
             self.get_logger().debug(
