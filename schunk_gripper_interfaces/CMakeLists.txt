@@ -22,6 +22,7 @@ rosidl_generate_interfaces(
     msg/Gripper.msg
     msg/GripperState.msg
     msg/GripperSpec.msg
+    msg/KeyValue.msg
   DEPENDENCIES
     std_msgs
 )

@@ -687,16 +687,20 @@ class Driver(Node):
         self.get_logger().debug("---> Move to absolute position")
         position = int(request.position * 1e6)
         velocity = int(request.velocity * 1e6)
+
+        options_dict = {kv.feature: kv.value for kv in request.options}
+        use_gpe = options_dict.get("use_gpe", False)
+
         if self.needs_synchronize(gripper):
             response.success = gripper["driver"].move_to_absolute_position(
                 position=position,
                 velocity=velocity,
-                use_gpe=request.use_gpe,
+                use_gpe=use_gpe,
                 scheduler=self.scheduler,
             )
         else:
             response.success = gripper["driver"].move_to_absolute_position(
-                position=position, velocity=velocity, use_gpe=request.use_gpe
+                position=position, velocity=velocity, use_gpe=use_gpe
             )
         response.message = gripper["driver"].get_status_diagnostics()
         return response

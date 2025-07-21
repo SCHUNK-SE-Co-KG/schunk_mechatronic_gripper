@@ -28,6 +28,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
+    KeyValue as KeyValue,
 )
 from rclpy.node import Node
 import rclpy
@@ -222,7 +223,7 @@ def test_driver_implements_move_to_absolute_position(lifecycle_interface):
             request = MoveToAbsolutePosition.Request()
             request.position = target["position"]
             request.velocity = target["velocity"]
-            request.use_gpe = target["use_gpe"]
+            request.options = [KeyValue(feature="use_gpe", value=target["use_gpe"])]
             future = client.call_async(request)
             rclpy.spin_until_future_complete(node, future, timeout_sec=3)
             assert future.result().success, f"{future.result().message}"
