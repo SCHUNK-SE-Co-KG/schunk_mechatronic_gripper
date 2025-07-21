@@ -760,12 +760,8 @@ class Driver(Node):
     # Service callbacks
     def _scan_cb(self, request: Scan.Request, response: Scan.Response):
         self.get_logger().warn(f"---> Scanning for {request.num_devices} devices")
-        scheduler_started = False
         try:
-            if not self.scheduler.worker_thread.is_alive():
-                self.scheduler.start()
-                scheduler_started = True
-
+            self.scheduler.start()
             device_ids = self.scanner.scan(
                 request.num_devices, scheduler=self.scheduler, start_id=12
             )
@@ -788,8 +784,7 @@ class Driver(Node):
             response.success = False
             response.message = f"Error during scanning: {str(e)}"
         finally:
-            if scheduler_started:
-                self.scheduler.stop()
+            self.scheduler.stop()
         return response
 
     def _add_gripper_cb(
