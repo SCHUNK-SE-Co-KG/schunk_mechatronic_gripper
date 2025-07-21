@@ -76,11 +76,14 @@ class Driver(Node):
         super().__init__(node_name, **kwargs)
         self.grippers: list[Gripper] = []
 
+        # Node parameters
+        self.declare_parameter("log_level", "INFO")
+        self.declare_parameter("serial_port", "/dev/ttyUSB0")
+
         # Initialization parameters
         self.init_parameters = {
             "host": "",
             "port": 80,
-            "serial_port": "/dev/ttyUSB0",
             "device_id": 12,
             "start_empty": False,
             "headless": False,
@@ -108,9 +111,6 @@ class Driver(Node):
         # Clean up initialization parameters
         for name in self.init_parameters.keys():
             self.undeclare_parameter(name)
-
-        # Node parameters
-        self.declare_parameter("log_level", "INFO")
 
         self.scanner: Scanner = Scanner(
             serial_port=self.get_parameter("serial_port").value
