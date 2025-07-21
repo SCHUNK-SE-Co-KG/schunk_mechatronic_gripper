@@ -216,6 +216,7 @@ class BKSLauncher:
 
         except Exception as e:
             print(f"Error stopping simulation: {e}")
+            return False
 
         # Clean up temp directory
         subprocess.run(["rm", "-rf", temp_dir], check=False)

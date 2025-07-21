@@ -323,6 +323,7 @@ class Scanner(object):
         start_id: int = 20,
         universal_id: int = 12,
         expected_response_rate: float = 0.3,  # tune 0.2-0.5, speed vs. collision risk
+        scheduler: Scheduler | None = None,
     ) -> list[int]:
         """
         Discover every gripper still listening on `universal_id`
@@ -340,76 +341,82 @@ class Scanner(object):
             Desired expected-answer rate (n/k). 0.2-0.5 works well.
         """
 
-        if gripper_num == 0:
-            return []
+        def do() -> list[int]:
+            if gripper_num == 0:
+                return []
 
-        # 1. push all grippers to the universal ID
-        self.client.retries = 0
-        Log.debug(f"Broadcasting: set ID → {universal_id} for all devices")
-        self.change_gripper_id(old_id=0, new_id=universal_id)  # broadcast
-        time.sleep(0.2)
+            # 1. push all grippers to the universal ID
+            self.client.retries = 0
+            Log.debug(f"Broadcasting: set ID → {universal_id} for all devices")
+            self.change_gripper_id(old_id=0, new_id=universal_id)  # broadcast
+            time.sleep(0.2)
 
-        grippers_found: list[dict] = []
-        gripper_ids: list[int] = []  # can make this an attribute if needed
-        remaining = gripper_num
-        current_k: int | None = None
-        attempt = 0
+            grippers_found: list[dict] = []
+            gripper_ids: list[int] = []  # can make this an attribute if needed
+            remaining = gripper_num
+            current_k: int | None = None
+            attempt = 0
 
-        while remaining > 0:
-            # 2. choose an expectancy and broadcast it
-            k = max(1, math.ceil(remaining / expected_response_rate))
+            while remaining > 0:
+                # 2. choose an expectancy and broadcast it
+                k = max(1, math.ceil(remaining / expected_response_rate))
 
-            if remaining == 1:
-                k = 1
+                if remaining == 1:
+                    k = 1
 
-            if k != current_k:
-                Log.debug(f"Broadcasting: set expectancy → {k} (n={remaining})")
-                self.set_expectancy(expectancy=k, dev_id=0)  # broadcast
-                current_k = k
+                if k != current_k:
+                    Log.debug(f"Broadcasting: set expectancy → {k} (n={remaining})")
+                    self.set_expectancy(expectancy=k, dev_id=0)  # broadcast
+                    current_k = k
+                    time.sleep(0.1)
+
+                # 3. ask "who has ID 12?" until we get *one* serial number
+                if not self.client.connected:
+                    self.client.connect()
+                    time.sleep(0.05)
+
+                attempt += 1
+                Log.debug(f"Request #{attempt} to ID {universal_id} (k={k})")
+                serial_number = self.get_serial_number(dev_id=universal_id)
                 time.sleep(0.1)
 
-            # 3. ask "who has ID 12?" until we get *one* serial number
-            if not self.client.connected:
-                self.client.connect()
-                time.sleep(0.05)
+                # no answer
+                if not serial_number or not isinstance(serial_number, str):
+                    continue
 
-            attempt += 1
-            Log.debug(f"Request #{attempt} to ID {universal_id} (k={k})")
-            serial_number = self.get_serial_number(dev_id=universal_id)
-            time.sleep(0.1)
+                # duplicate (already processed)
+                if serial_number in (g["serial"] for g in grippers_found):
+                    Log.debug(f"Duplicate answer from {serial_number} — ignored")
+                    continue
 
-            # no answer
-            if not serial_number or not isinstance(serial_number, str):
-                continue
+                new_id = start_id + len(grippers_found)
+                Log.debug(f"Assigning ID {new_id} to gripper {serial_number}")
 
-            # duplicate (already processed)
-            if serial_number in (g["serial"] for g in grippers_found):
-                Log.debug(f"Duplicate answer from {serial_number} — ignored")
-                continue
+                success = self.change_gripper_id_by_serial_num(
+                    serial_number=serial_number,
+                    new_id=new_id,
+                )
+                time.sleep(0.1)
 
-            new_id = start_id + len(grippers_found)
-            Log.debug(f"Assigning ID {new_id} to gripper {serial_number}")
+                if not success:
+                    Log.debug("ID change failed — retrying")
+                    continue
 
-            success = self.change_gripper_id_by_serial_num(
-                serial_number=serial_number,
-                new_id=new_id,
-            )
-            time.sleep(0.1)
+                grippers_found.append(
+                    {"serial": serial_number, "old_id": universal_id, "new_id": new_id}
+                )
+                gripper_ids.append(new_id)
+                remaining -= 1
 
-            if not success:
-                Log.debug("ID change failed — retrying")
-                continue
+                time.sleep(0.1)
 
-            grippers_found.append(
-                {"serial": serial_number, "old_id": universal_id, "new_id": new_id}
-            )
-            gripper_ids.append(new_id)
-            remaining -= 1
+            self.set_expectancy(expectancy=1, dev_id=0)  # reset expectancy
+            return gripper_ids
 
-            time.sleep(0.1)
-
-        self.set_expectancy(expectancy=1, dev_id=0)  # reset expectancy
-        return gripper_ids
+        if scheduler:
+            return scheduler.execute(func=partial(do)).result()
+        else:
+            return do()
 
 
 def gripper_available() -> bool:
