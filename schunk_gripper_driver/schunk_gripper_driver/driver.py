@@ -776,8 +776,11 @@ class Driver(Node):
                         device_id=id,
                     )
 
-                response.message = f"Successfully scanned and assigned \
-                    IDs to {len(device_ids)} devices. IDs: {device_ids}"
+                response.message = (
+                    f"Successfully scanned and found {len(device_ids)} devices. "
+                    f"Their IDs are now: {device_ids}"
+                )
+
             else:
                 response.message = f"Failed to scan for {request.num_devices} devices"
         except Exception as e:
