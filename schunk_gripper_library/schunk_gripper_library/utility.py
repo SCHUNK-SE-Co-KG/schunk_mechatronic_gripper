@@ -339,7 +339,7 @@ class Scanner(object):
             Desired expected-answer rate (n/k). 0.2-0.5 works well.
         """
 
-        start_id: int = 20
+        start_id: int = 12
         universal_id: int = 10
 
         def do() -> list[int]:
