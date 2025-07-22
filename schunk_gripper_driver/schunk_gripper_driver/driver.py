@@ -759,11 +759,11 @@ class Driver(Node):
 
     # Service callbacks
     def _scan_cb(self, request: Scan.Request, response: Scan.Response):
-        self.get_logger().warn(f"---> Scanning for {request.num_devices} devices")
+        self.get_logger().debug(f"---> Scanning for {request.num_devices} devices")
         try:
             self.scheduler.start()
             device_ids = self.scanner.scan(
-                request.num_devices, scheduler=self.scheduler, start_id=12
+                request.num_devices, scheduler=self.scheduler
             )
             response.success = (
                 True if isinstance(device_ids, list) and len(device_ids) > 0 else False

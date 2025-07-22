@@ -320,8 +320,6 @@ class Scanner(object):
     def scan(
         self,
         gripper_num: int,
-        start_id: int = 20,
-        universal_id: int = 12,
         expected_response_rate: float = 0.3,  # tune 0.2-0.5, speed vs. collision risk
         scheduler: Scheduler | None = None,
     ) -> list[int]:
@@ -340,6 +338,9 @@ class Scanner(object):
         expected_response_rate : float, default 0.3
             Desired expected-answer rate (n/k). 0.2-0.5 works well.
         """
+
+        start_id: int = 20
+        universal_id: int = 10
 
         def do() -> list[int]:
             if gripper_num == 0:

@@ -37,7 +37,7 @@ def test_start_and_stop_multiple_simulations(cleanup):
 
 @skip_without_bks
 def test_helper_rejects_invalid_serial_number():
-    invalid_serials = ["", "12345678", "000000000000", "00000001a"]
+    invalid_serials = ["", "123456789", "000000000000", "00000001a"]
 
     for serial in invalid_serials:
         assert not start_bks_simulation(sim_id=10, serial_num=serial)

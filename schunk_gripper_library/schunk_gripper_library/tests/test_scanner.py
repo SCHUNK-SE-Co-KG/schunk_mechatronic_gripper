@@ -87,10 +87,18 @@ def test_scanner_connects_automatically(cleanup):
     time.sleep(0.5)
 
     scanner.client.close()
-    time.sleep(0.5)  # Wait for the client to close
+    time.sleep(0.5)
 
-    scanner.set_expectancy(expectancy=10, dev_id=17)  # This should trigger auto-connect
-    time.sleep(0.5)  # Wait for the connection to establish
+    scanner.set_expectancy(expectancy=10, dev_id=17)
+    time.sleep(0.5)
+
+    assert scanner.client.connected
+
+    scanner.client.close()
+    time.sleep(0.5)
+
+    scanner.get_serial_number(dev_id=17)
+    time.sleep(0.5)
 
     assert scanner.client.connected
 
@@ -149,7 +157,7 @@ def test_scanner_assigns_individual_ids(cleanup):
 
     max_simulations = 3
     simulations = []
-    start_id = 30
+    default_start_id = 20
 
     # Start multiple grippers
     for i in range(max_simulations):
@@ -163,7 +171,7 @@ def test_scanner_assigns_individual_ids(cleanup):
 
     # Assign new IDs to the grippers
     start_time = time.perf_counter()
-    scanner.scan(max_simulations, start_id=start_id, expected_response_rate=0.3)
+    scanner.scan(gripper_num=max_simulations)
     end_time = time.perf_counter()
     execution_time = end_time - start_time
     time.sleep(0.5)
@@ -171,11 +179,11 @@ def test_scanner_assigns_individual_ids(cleanup):
     # Verify that the serial numbers are unique and match the assigned IDs
     serial_nums = []
     for x in range(max_simulations):
-        serial_num = scanner.get_serial_number(dev_id=start_id + x)
-        assert serial_num is not None, f"Serial number for ID {start_id + x} is None"
+        serial_num = scanner.get_serial_number(dev_id=default_start_id + x)
         assert (
-            serial_num not in serial_nums
-        ), f"Serial number {serial_num} for ID {start_id + x} is not unique"
+            serial_num is not None
+        ), f"Serial number for ID {default_start_id + x} is None"
+        assert serial_num not in serial_nums
         serial_nums.append(serial_num)
 
     stop_all()
@@ -203,5 +211,82 @@ def test_scan_returns_list_of_devices(cleanup):
     assert len(device_ids) == num_grippers
 
     assert all(isinstance(dev_id, int) for dev_id in device_ids)
+
+    stop_all()
+
+
+@skip_without_bks
+def test_scanner_returns_none_for_wrong_dev_id(cleanup):
+    scanner = Scanner()
+    start_bks_simulation(sim_id=21, serial_num="00000021")
+    time.sleep(0.5)
+
+    # Test with a wrong device ID
+    wrong_dev_id = 30
+    serial_number = scanner.get_serial_number(dev_id=wrong_dev_id)
+    assert serial_number is None
+
+    stop_bks_simulation(sim_id=21)
+
+
+@skip_without_bks
+def test_scan_with_scheduler(cleanup):
+    from ..utility import Scheduler
+
+    scanner = Scanner()
+    scheduler = Scheduler()
+    scheduler.start()
+
+    # Start grippers
+    for i in range(2):
+        sim_id = 30 + i
+        init_serial_num = f"000000{sim_id:02d}"
+        start_bks_simulation(sim_id=sim_id, serial_num=init_serial_num, device_index=i)
+        time.sleep(0.5)
+
+    device_ids = scanner.scan(gripper_num=2, scheduler=scheduler)
+    assert len(device_ids) == 2
+
+    scheduler.stop()
+    stop_all()
+
+
+@skip_without_bks
+def test_scan_different_response_rates(cleanup):
+    """Test scan with different expected_response_rate values."""
+    scanner = Scanner()
+
+    # Test with very low rate
+    for i in range(2):
+        sim_id = 35 + i
+        init_serial_num = f"000000{sim_id:02d}"
+        start_bks_simulation(sim_id=sim_id, serial_num=init_serial_num, device_index=i)
+        time.sleep(0.5)
+
+    device_ids = scanner.scan(gripper_num=2, expected_response_rate=0.1)
+    assert len(device_ids) == 2
+
+    stop_all()
+
+
+@skip_without_bks
+def test_scan_collision_recovery(cleanup):
+    """Test scan behavior with many grippers (collision scenarios)."""
+    scanner = Scanner()
+
+    # Start many grippers to force collisions
+    num_grippers = 4
+    for i in range(num_grippers):
+        sim_id = 50 + i
+        init_serial_num = f"000000{sim_id:02d}"
+        start_bks_simulation(sim_id=sim_id, serial_num=init_serial_num, device_index=i)
+        time.sleep(0.3)
+
+    start_time = time.perf_counter()
+    device_ids = scanner.scan(gripper_num=num_grippers, expected_response_rate=0.2)
+    end_time = time.perf_counter()
+
+    assert len(device_ids) == num_grippers
+    assert end_time - start_time < 30  # Should complete in reasonable time
 
     stop_all()
