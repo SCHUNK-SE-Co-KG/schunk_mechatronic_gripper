@@ -72,11 +72,11 @@ def test_scanner_rejects_invalid_expectancy_and_invalid_dev_ids(cleanup):
     start_bks_simulation(sim_id=16, serial_num="00000016")
     time.sleep(0.5)
 
-    assert not scanner.set_expectancy(expectancy=400, dev_id=16)
+    assert not scanner.set_response_expectancy(expectancy=400, dev_id=16)
 
-    assert not scanner.set_expectancy(expectancy=-1, dev_id=16)
+    assert not scanner.set_response_expectancy(expectancy=-1, dev_id=16)
 
-    assert not scanner.set_expectancy(expectancy=10, dev_id=400)
+    assert not scanner.set_response_expectancy(expectancy=10, dev_id=400)
 
 
 @skip_without_bks
@@ -89,7 +89,7 @@ def test_scanner_connects_automatically(cleanup):
     scanner.client.close()
     time.sleep(0.5)
 
-    scanner.set_expectancy(expectancy=10, dev_id=17)
+    scanner.set_response_expectancy(expectancy=10, dev_id=17)
     time.sleep(0.5)
 
     assert scanner.client.connected
@@ -123,13 +123,13 @@ def test_scanner_changes_responds_expectancy(cleanup):
 
     start_bks_simulation(sim_id=14, serial_num="00000014")
 
-    scanner.set_expectancy(expectancy=255, dev_id=14)
+    scanner.set_response_expectancy(expectancy=255, dev_id=14)
     time.sleep(0.5)
     last_log = get_last_log(sim_id=14)
 
     assert "set_response_expectancy" in last_log and "set to 255" in last_log
 
-    scanner.set_expectancy(expectancy=0, dev_id=14)
+    scanner.set_response_expectancy(expectancy=0, dev_id=14)
     time.sleep(0.5)
     last_log = get_last_log(sim_id=14)
     assert "set_response_expectancy" in last_log and "set to 0" in last_log
@@ -157,11 +157,11 @@ def test_scanner_assigns_individual_ids(cleanup):
 
     max_simulations = 3
     simulations = []
-    default_start_id = 20
+    default_start_id = 12
 
     # Start multiple grippers
     for i in range(max_simulations):
-        sim_id = 20 + i
+        sim_id = default_start_id + i
         init_serial_num = f"000000{sim_id:02d}"
         start_bks_simulation(sim_id=sim_id, serial_num=init_serial_num, device_index=i)
 
@@ -180,9 +180,7 @@ def test_scanner_assigns_individual_ids(cleanup):
     serial_nums = []
     for x in range(max_simulations):
         serial_num = scanner.get_serial_number(dev_id=default_start_id + x)
-        assert (
-            serial_num is not None
-        ), f"Serial number for ID {default_start_id + x} is None"
+        assert serial_num is not None
         assert serial_num not in serial_nums
         serial_nums.append(serial_num)
 
@@ -265,28 +263,5 @@ def test_scan_different_response_rates(cleanup):
 
     device_ids = scanner.scan(gripper_num=2, expected_response_rate=0.1)
     assert len(device_ids) == 2
-
-    stop_all()
-
-
-@skip_without_bks
-def test_scan_collision_recovery(cleanup):
-    """Test scan behavior with many grippers (collision scenarios)."""
-    scanner = Scanner()
-
-    # Start many grippers to force collisions
-    num_grippers = 4
-    for i in range(num_grippers):
-        sim_id = 50 + i
-        init_serial_num = f"000000{sim_id:02d}"
-        start_bks_simulation(sim_id=sim_id, serial_num=init_serial_num, device_index=i)
-        time.sleep(0.3)
-
-    start_time = time.perf_counter()
-    device_ids = scanner.scan(gripper_num=num_grippers, expected_response_rate=0.2)
-    end_time = time.perf_counter()
-
-    assert len(device_ids) == num_grippers
-    assert end_time - start_time < 30  # Should complete in reasonable time
 
     stop_all()

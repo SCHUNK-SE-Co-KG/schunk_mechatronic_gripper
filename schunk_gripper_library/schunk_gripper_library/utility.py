@@ -198,7 +198,6 @@ class Scanner(object):
         self.client.connect()
 
     def get_serial_number(self, dev_id: int) -> str | None:
-        """Get the serial number of the gripper using the serial_no_num parameter."""
         try:
             if not (0 <= dev_id <= 247):
                 Log.warning(f"Device ID must be between 0 and 247, got: {dev_id}")
@@ -224,13 +223,6 @@ class Scanner(object):
             return None
 
     def change_gripper_id_by_serial_num(self, serial_number: str, new_id: int) -> bool:
-        """
-        Change the ID of a specific gripper identified by its serial number.
-        Args:
-            serial_number: Serial number as hex string (e.g., "12345678")
-            new_id: New device ID to assign
-        This uses a broadcast message with serial number targeting.
-        """
         # Validate and convert hex string serial number to 4-byte integer
         if len(serial_number) != 8:
             return False
@@ -273,14 +265,7 @@ class Scanner(object):
         )
         return True
 
-    def set_expectancy(self, expectancy: int = 1, dev_id: int = 0) -> bool:
-        """
-        Set response expectancy for Modbus devices.
-        Args:
-            expectancy: Integer value (0-255) that will be converted to hex
-            slave: Slave ID (0 for broadcast)
-        """
-
+    def set_response_expectancy(self, expectancy: int = 1, dev_id: int = 0) -> bool:
         # Validate input range
         if not (0 <= expectancy <= 255):
             Log.warning(f"Expectancy must be between 0 and 255, got: {expectancy}")
@@ -295,15 +280,11 @@ class Scanner(object):
                 return False
             time.sleep(0.1)
 
-        # Convert integer directly to hex (ResponseExpectancyRequest expects int)
         req = ResponseExpectancyRequest(expectancy=expectancy, slave=dev_id)
         self.client.execute(request=req, no_response_expected=True)
         return True
 
     def change_gripper_id(self, old_id: int, new_id: int):
-        """
-        Change the ID of the gripper by writing to a specific register.
-        """
         builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
         builder.add_8bit_uint(new_id)
         payload = builder.to_registers()
@@ -324,19 +305,8 @@ class Scanner(object):
         scheduler: Scheduler | None = None,
     ) -> list[int]:
         """
-        Discover every gripper still listening on `universal_id`
-        and give it a unique ID starting at `start_id`.
-
-        Parameters
-        ----------
-        gripper_num : int
-            How many grippers you expect to find.
-        start_id : int, default 20
-            First individual ID to assign.
-        universal_id : int, default 12
-            Temporary ID put on all grippers so they answer the same request.
-        expected_response_rate : float, default 0.3
-            Desired expected-answer rate (n/k). 0.2-0.5 works well.
+        Discover every gripper on the Modbus and assign them incremental IDs
+        starting from 12.
         """
 
         start_id: int = 12
@@ -367,7 +337,7 @@ class Scanner(object):
 
                 if k != current_k:
                     Log.debug(f"Broadcasting: set expectancy → {k} (n={remaining})")
-                    self.set_expectancy(expectancy=k, dev_id=0)  # broadcast
+                    self.set_response_expectancy(expectancy=k, dev_id=0)  # broadcast
                     current_k = k
                     time.sleep(0.1)
 
@@ -411,7 +381,7 @@ class Scanner(object):
 
                 time.sleep(0.1)
 
-            self.set_expectancy(expectancy=1, dev_id=0)  # reset expectancy
+            self.set_response_expectancy(expectancy=1, dev_id=0)  # reset expectancy
             return gripper_ids
 
         if scheduler:
