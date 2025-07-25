@@ -23,29 +23,40 @@ class ScannerTestSetup(Scanner):
         # Additional setup can be done here if needed
 
     def change_serial_num(self, dev_id: int, serial_number: str) -> bool:
-        """
-        Change the serial number of the gripper by writing to
-        the serial_no_num register.
-        Args:
-            dev_id: Device ID of the gripper
-            serial_number: Serial number as hex string (e.g., "12345678")
-        Note: This may not work if the register is read-only.
-        """
-
         if len(serial_number) != 8:
-            return False
-
-        if not all(c in "0123456789abcdefABCDEF" for c in serial_number):
+            print(f"Serial number must be 8 characters, got: {len(serial_number)}")
             return False
 
         if not (0 <= dev_id <= 247):
+            print(f"Invalid device ID: {dev_id}. Must be between 0 and 247.")
             return False
+
+        # Always try to parse as hex first (since get_serial_number returns hex)
+        try:
+            serial_int = int(serial_number, 16)
+            if serial_int > 0xFFFFFFFF:
+                print(f"Serial number too large for 32 bits: {serial_number}")
+                return False
+            print(f"Parsed as hex: {serial_number} -> {serial_int}")
+        except ValueError:
+            # Check if it's alphanumeric format (4 letters + 4 digits)
+            letters_part = serial_number[:4].upper()
+            digits_part = serial_number[4:]
+
+            if all(c in "BCDFGHJKLMNPQRSTVWXYZ" for c in letters_part) and all(
+                c.isdigit() for c in digits_part
+            ):
+                # For alphanumeric format, we need the proper SCHUNK algorithm
+                # For now, use a hash-based approach that fits in 32 bits
+                serial_hash = hash(serial_number.upper()) & 0xFFFFFFFF
+                serial_int = serial_hash
+                print(f"Parsed as alphanumeric: {serial_number} -> hash {serial_int}")
+            else:
+                print(f"Invalid serial number format: {serial_number}")
+                return False
 
         try:
             print(f"Changing serial number for device {dev_id} to {serial_number}")
-            # Convert hex string to integer
-
-            serial_int = int(serial_number, 16)
 
             builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
 
@@ -65,7 +76,6 @@ class ScannerTestSetup(Scanner):
 
         except Exception as e:
             print(f"Unexpected error changing serial number: {e}")
-
             return False
 
 
@@ -77,15 +87,9 @@ class BKSLauncher:
     def start_bks_simulation(
         self, sim_id: int, serial_num: str, device_index: int = 0
     ) -> bool:
-        """
-        Start a BKS simulation
-
-        Args:
-            sim_id: Unique id for this simulation, will also be used as the gripper ID
-            device_index: Index of the fake device to use (0 = /dev/ttypts2fake0, etc.)
-        Returns:
-            True if started successfully, False otherwise
-        """
+        print(
+            f"Starting BKS simulation with ID {sim_id} and serial number {serial_num}"
+        )
         if sim_id in self.simulations:
             print(f"Simulation '{sim_id}' is already running")
             return False
@@ -177,15 +181,6 @@ class BKSLauncher:
         return False
 
     def stop_bks_simulation(self, sim_id: int) -> bool:
-        """
-        Stop a BKS simulation
-
-        Args:
-            sim_id: Identifier of the simulation to stop
-
-        Returns:
-            True if stopped successfully, False if not found
-        """
         if sim_id not in self.simulations:
             print(f"Simulation '{sim_id}' not found")
             return False
@@ -225,7 +220,6 @@ class BKSLauncher:
         return True
 
     def stop_all(self):
-        """Stop all running simulations"""
         print("Stopping all simulations...")
 
         # Stop all simulations

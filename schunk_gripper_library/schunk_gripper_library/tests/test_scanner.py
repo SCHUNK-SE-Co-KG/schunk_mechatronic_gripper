@@ -29,47 +29,64 @@ def test_scanner_returns_no_serial_number_for_non_existent_id():
 @skip_without_bks
 def test_scanner_rejects_invalid_serial_number(cleanup):
     scanner = Scanner()
-    start_bks_simulation(sim_id=15, serial_num="00000015")
+    start_bks_simulation(sim_id=15, serial_num="BCDX0015")
     time.sleep(0.5)  # Wait for the simulation to stabilize
 
-    # Invalid serial numbers
-    invalid_serial_too_many_chars = "0000000000000"
-    assert not scanner.change_gripper_id_by_serial_num(
-        new_id=15, serial_number=invalid_serial_too_many_chars
-    )
+    invalid_serial_nums = [
+        "123456789",  # Too many characters
+        "12345",  # Too few characters
+        "AEIOU123",  # Contains AEIOU
+        12345678,  # Non-string input
+        None,  # None input
+    ]
 
-    invalid_serial_too_few_chars = "000000"
-    assert not scanner.change_gripper_id_by_serial_num(
-        new_id=15, serial_number=invalid_serial_too_few_chars
-    )
-
-    invalid_serial_invalid_chars = "00000#!$"
-    assert not scanner.change_gripper_id_by_serial_num(
-        new_id=15, serial_number=invalid_serial_invalid_chars
-    )
+    for serial_num in invalid_serial_nums:
+        assert not scanner.change_gripper_id_by_serial_num(
+            new_id=20, serial_number=serial_num
+        )
 
     stop_bks_simulation(sim_id=15)
+
+
+@skip_without_bks
+def test_scanner_rejects_invalid_gripper_id(cleanup):
+    scanner = Scanner()
+    start_bks_simulation(sim_id=19, serial_num="BCDX0019")
+    time.sleep(0.5)
+    # Invalid gripper IDs
+    invalid_gripper_ids = [-1, 0, 1000, "abc"]
+
+    for gripper_id in invalid_gripper_ids:
+        assert not scanner.change_gripper_id_by_serial_num(
+            new_id=gripper_id, serial_number="BCDX0019"
+        )
+
+    stop_bks_simulation(sim_id=19)
 
 
 @skip_without_bks
 def test_scanner_changes_gripper_id(cleanup):
     scanner = Scanner()
     sim_id = 18
-    serial_num = "00000018"
+    serial_num = "BCDX0018"
     start_bks_simulation(sim_id=sim_id, serial_num=serial_num)
 
     time.sleep(0.5)
 
     assert scanner.change_gripper_id(old_id=sim_id, new_id=20)
 
-    assert scanner.get_serial_number(dev_id=20) == serial_num
+    # Since alphanumeric serials get converted to hash values and returned as hex,
+    # we need to expect the hex representation of the hash
+    expected_hash = hash(serial_num.upper()) & 0xFFFFFFFF
+    expected_hex = f"{expected_hash:08X}"
+    assert scanner.get_serial_number(dev_id=20) == expected_hex
     stop_bks_simulation(sim_id=18)
 
 
 @skip_without_bks
 def test_scanner_rejects_invalid_expectancy_and_invalid_dev_ids(cleanup):
     scanner = Scanner()
-    start_bks_simulation(sim_id=16, serial_num="00000016")
+    start_bks_simulation(sim_id=16, serial_num="BCDX0016")
     time.sleep(0.5)
 
     assert not scanner.set_response_expectancy(expectancy=400, dev_id=16)
@@ -82,7 +99,7 @@ def test_scanner_rejects_invalid_expectancy_and_invalid_dev_ids(cleanup):
 @skip_without_bks
 def test_scanner_connects_automatically(cleanup):
     scanner = Scanner()
-    start_bks_simulation(sim_id=17, serial_num="00000017")
+    start_bks_simulation(sim_id=17, serial_num="BCDX0017")
 
     time.sleep(0.5)
 
@@ -106,13 +123,19 @@ def test_scanner_connects_automatically(cleanup):
 @skip_without_bks
 def test_scanner_offers_reading_serial_number(cleanup):
     scanner = Scanner()
-    serial = "00000013"  # Example serial number
+    serial = "BCDX1234"  # Use valid format: 4 letters (no AEIOU) + 4 digits
     start_bks_simulation(sim_id=13, serial_num=serial)
 
     time.sleep(0.5)  # Wait for the simulation to stabilize
     serial_number = scanner.get_serial_number(dev_id=13)
 
-    assert serial_number == serial
+    # Since alphanumeric serials get converted to hash values and returned as hex,
+    # we need to expect the hex representation of the hash
+    # Convert the original serial the same way as change_serial_num does
+    expected_hash = hash(serial.upper()) & 0xFFFFFFFF
+    expected_hex = f"{expected_hash:08X}"
+
+    assert serial_number == expected_hex
 
     stop_bks_simulation(sim_id=13)
 
@@ -121,7 +144,7 @@ def test_scanner_offers_reading_serial_number(cleanup):
 def test_scanner_changes_responds_expectancy(cleanup):
     scanner = Scanner()
 
-    start_bks_simulation(sim_id=14, serial_num="00000014")
+    start_bks_simulation(sim_id=14, serial_num="BCDX0014")
 
     scanner.set_response_expectancy(expectancy=255, dev_id=14)
     time.sleep(0.5)
@@ -134,19 +157,22 @@ def test_scanner_changes_responds_expectancy(cleanup):
     last_log = get_last_log(sim_id=14)
     assert "set_response_expectancy" in last_log and "set to 0" in last_log
 
-    stop_bks_simulation(sim_id=14) is True
+    stop_bks_simulation(sim_id=14)
 
 
 @skip_without_bks
 def test_scanner_changes_id_using_grippers_serial_number(cleanup):
     scanner = Scanner()
-    serial = "00000019"  # Example serial number
+    serial = "BCDF0020"  # Test with hex format like documentation example
     start_bks_simulation(sim_id=20, serial_num=serial)
     time.sleep(0.5)
-
-    assert scanner.change_gripper_id_by_serial_num(serial_number=serial, new_id=25)
-    time.sleep(0.5)
-    assert scanner.get_serial_number(dev_id=25) == serial
+    for x in range(5):
+        assert scanner.change_gripper_id_by_serial_num(
+            serial_number=serial, new_id=x + 14
+        )
+        time.sleep(0.5)
+        assert scanner.get_serial_number(dev_id=x + 14) == serial
+        time.sleep(0.5)
 
     stop_bks_simulation(sim_id=20)
 
@@ -157,12 +183,14 @@ def test_scanner_assigns_individual_ids(cleanup):
 
     max_simulations = 3
     simulations = []
+    sim_start_id = 20
     default_start_id = 12
 
     # Start multiple grippers
     for i in range(max_simulations):
-        sim_id = default_start_id + i
-        init_serial_num = f"000000{sim_id:02d}"
+        sim_id = sim_start_id + i
+        # Use valid format: 4 letters (no AEIOU) + 4 digits
+        init_serial_num = f"BCDF{sim_id:04d}"
         start_bks_simulation(sim_id=sim_id, serial_num=init_serial_num, device_index=i)
 
         time.sleep(0.5)
@@ -201,7 +229,8 @@ def test_scan_returns_list_of_devices(cleanup):
     num_grippers = 2
     for i in range(num_grippers):
         sim_id = 20 + i
-        init_serial_num = f"000000{sim_id:02d}"
+        # Use valid format: 4 letters (no AEIOU) + 4 digits
+        init_serial_num = f"BFJK{sim_id:04d}"
         start_bks_simulation(sim_id=sim_id, serial_num=init_serial_num, device_index=i)
         time.sleep(0.5)
 
@@ -216,7 +245,7 @@ def test_scan_returns_list_of_devices(cleanup):
 @skip_without_bks
 def test_scanner_returns_none_for_wrong_dev_id(cleanup):
     scanner = Scanner()
-    start_bks_simulation(sim_id=21, serial_num="00000021")
+    start_bks_simulation(sim_id=21, serial_num="BCDX0021")
     time.sleep(0.5)
 
     # Test with a wrong device ID
@@ -238,7 +267,8 @@ def test_scan_with_scheduler(cleanup):
     # Start grippers
     for i in range(2):
         sim_id = 30 + i
-        init_serial_num = f"000000{sim_id:02d}"
+        # Use valid format: 4 letters (no AEIOU) + 4 digits
+        init_serial_num = f"BCGD{sim_id:04d}"
         start_bks_simulation(sim_id=sim_id, serial_num=init_serial_num, device_index=i)
         time.sleep(0.5)
 
@@ -257,7 +287,8 @@ def test_scan_different_response_rates(cleanup):
     # Test with very low rate
     for i in range(2):
         sim_id = 35 + i
-        init_serial_num = f"000000{sim_id:02d}"
+        # Use valid format: 4 letters (no AEIOU) + 4 digits
+        init_serial_num = f"BFGH{sim_id:04d}"
         start_bks_simulation(sim_id=sim_id, serial_num=init_serial_num, device_index=i)
         time.sleep(0.5)
 

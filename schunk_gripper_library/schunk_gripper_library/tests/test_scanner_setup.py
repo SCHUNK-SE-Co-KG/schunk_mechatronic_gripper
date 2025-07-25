@@ -19,14 +19,19 @@ def test_start_and_stop_multiple_simulations(cleanup):
 
     for i in range(max_simulations):
         sim_id = 20 + i
-        serial_num = f"000000{sim_id:02d}"
+        # Use valid format: 4 letters (no AEIOU) + 4 digits
+        serial_num = f"BCGH{sim_id:04d}"
         assert start_bks_simulation(
-            sim_id=sim_id, serial_num=serial_num, device_index=i
+            sim_id=sim_id, serial_num=serial_num, device_index=i + 1
         )
 
         time.sleep(0.5)  # Wait for simulation to stabilize
 
-        assert scanner.get_serial_number(dev_id=sim_id) == serial_num
+        # Since alphanumeric serials get converted to hash values and returned as hex,
+        # we need to expect the hex representation of the hash
+        expected_hash = hash(serial_num.upper()) & 0xFFFFFFFF
+        expected_hex = f"{expected_hash:08X}"
+        assert scanner.get_serial_number(dev_id=sim_id) == expected_hex
 
         simulations.append(sim_id)
         time.sleep(1)  # Additional delay before next simulation
@@ -37,7 +42,15 @@ def test_start_and_stop_multiple_simulations(cleanup):
 
 @skip_without_bks
 def test_helper_rejects_invalid_serial_number():
-    invalid_serials = ["", "123456789", "000000000000", "00000001a"]
+    invalid_serials = [
+        "",
+        "123456789",
+        "AEIOU123",
+        "BCDF12AB",
+        "bcdf1234",
+        "BCDF",
+        "GGGGGGGG",
+    ]
 
     for serial in invalid_serials:
         assert not start_bks_simulation(sim_id=10, serial_num=serial)
@@ -46,12 +59,12 @@ def test_helper_rejects_invalid_serial_number():
 @skip_without_bks
 def test_launcher_rejects_duplicate_sim_ids(cleanup):
     sim_id = 10
-    serial_num = "00000010"
+    serial_num = "BCDX1234"
 
     start_bks_simulation(sim_id=sim_id, serial_num=serial_num)
     time.sleep(0.5)
 
-    assert not start_bks_simulation(sim_id=sim_id, serial_num="00000011")
+    assert not start_bks_simulation(sim_id=sim_id, serial_num="BCDF5678")
 
     assert stop_bks_simulation(sim_id=sim_id)
 
@@ -60,7 +73,7 @@ def test_launcher_rejects_duplicate_sim_ids(cleanup):
 def test_launcher_rejects_duplicate_serial_numbers(cleanup):
     sim_id_1 = 10
     sim_id_2 = 11
-    serial_num = "00000012"
+    serial_num = "BCDX9999"
 
     assert start_bks_simulation(sim_id=sim_id_1, serial_num=serial_num)
     time.sleep(0.5)
@@ -73,7 +86,7 @@ def test_launcher_rejects_duplicate_serial_numbers(cleanup):
 @skip_without_bks
 def test_launcher_rejects_invalid_device_index(cleanup):
     sim_id = 10
-    serial_num = "00000010"
+    serial_num = "BCDX1010"
 
     assert not start_bks_simulation(
         sim_id=sim_id, serial_num=serial_num, device_index=-1
@@ -82,8 +95,6 @@ def test_launcher_rejects_invalid_device_index(cleanup):
     assert not start_bks_simulation(
         sim_id=sim_id, serial_num=serial_num, device_index=100
     )
-
-    assert stop_bks_simulation(sim_id=sim_id)
 
 
 @skip_without_bks

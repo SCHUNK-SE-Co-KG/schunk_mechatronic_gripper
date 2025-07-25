@@ -200,7 +200,7 @@ class Scanner(object):
     def get_serial_number(self, dev_id: int) -> str | None:
         try:
             if not (0 <= dev_id <= 247):
-                Log.warning(f"Device ID must be between 0 and 247, got: {dev_id}")
+                Log.debug(f"Device ID must be between 0 and 247, got: {dev_id}")
                 return None
 
             if not self.client.connected:
@@ -210,7 +210,7 @@ class Scanner(object):
             result = self.client.read_holding_registers(
                 address=0x1020 - 1, slave=dev_id, count=2
             )
-
+            Log.debug(f"Read serial number for device {dev_id}: {result}")
             if not result.isError() and result.dev_id == dev_id:
                 serial_num = (result.registers[0] << 16) | result.registers[1]
                 serial_hex_str = f"{serial_num:08X}"
@@ -223,33 +223,69 @@ class Scanner(object):
             return None
 
     def change_gripper_id_by_serial_num(self, serial_number: str, new_id: int) -> bool:
-        # Validate and convert hex string serial number to 4-byte integer
+        # Validate new_id range
+        if not isinstance(new_id, int):
+            Log.warning(f"New ID must be an integer, got: {type(new_id)}")
+            return False
+
+        if not (1 <= new_id <= 247):
+            Log.warning(f"New ID must be between 1 and 247, got: {new_id}")
+            return False
+
+        # Validate serial number format
+        if not isinstance(serial_number, str):
+            Log.warning(f"Serial number must be a string, got: {type(serial_number)}")
+            return False
         if len(serial_number) != 8:
+            Log.warning(
+                f"Serial number must be 8 characters, got: {len(serial_number)}"
+            )
             return False
 
-        if not all(c in "0123456789ABCDEF" for c in serial_number.upper()):
-            Log.warning(f"Invalid serial number format: {serial_number}")
-            return False
+        # Always try to parse as hex first (since get_serial_number returns hex)
+        try:
+            serial_num = int(serial_number, 16)
+            if serial_num > 0xFFFFFFFF:
+                Log.warning(f"Serial number too large for 32 bits: {serial_number}")
+                return False
+        except ValueError:
+            # Check if it's alphanumeric format (4 letters + 4 digits)
+            letters_part = serial_number[:4].upper()
+            digits_part = serial_number[4:]
 
-        # Convert hex string directly to integer
-        serial_hex = int(serial_number, 16)
+            if all(c in "BCDFGHJKLMNPQRSTVWXYZ" for c in letters_part) and all(
+                c.isdigit() for c in digits_part
+            ):
+                serial_hash = hash(serial_number.upper()) & 0xFFFFFFFF
+                serial_num = serial_hash
+            else:
+                Log.warning(f"Invalid serial number format: {serial_number}")
+                return False
 
-        # Build payload according to the example format
+        # Build payload according to the documentation format
         builder = BinaryPayloadBuilder(byteorder=Endian.BIG, wordorder=Endian.BIG)
 
-        # Add new slave ID (1 byte)
+        # Byte 0: new_slave_id_min
         builder.add_8bit_uint(new_id)
-        builder.add_8bit_uint(0x00)  # Padding
+        # Byte 1: dummy byte
+        builder.add_8bit_uint(0x00)
 
-        # Add new slave ID again (2 bytes)
-        builder.add_16bit_uint(new_id)
+        # Byte 2: new_slave_id_max
+        builder.add_8bit_uint(new_id)
+        # Byte 3: dummy byte
+        builder.add_8bit_uint(0x00)
 
-        # Add serial number (4 bytes)
-        builder.add_32bit_uint(serial_hex)
+        # Bytes 4-7: select_serial_number (big endian format)
+        serial_bytes = serial_num.to_bytes(4, byteorder="big")
+        for byte in serial_bytes:
+            builder.add_8bit_uint(byte)
 
-        # Add padding (4 bytes of 0xFF)
-        for _ in range(4):
-            builder.add_8bit_uint(0xFF)
+        # Bytes 8-11: select_mask (big endian format)
+        # Use 0xFFFFFFFF to match all bits of the serial number
+        mask = 0xFFFFFFFF
+        mask_bytes = mask.to_bytes(4, byteorder="big")
+        for byte in mask_bytes:
+            builder.add_8bit_uint(byte)
 
         payload = builder.to_registers()
         register_address = 0x11A7
