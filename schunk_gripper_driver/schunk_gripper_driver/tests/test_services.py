@@ -21,6 +21,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     ListGrippers,
     AddGripper,
     MoveToAbsolutePosition,
+    MoveToAbsolutePositionGPE,
     Grip,
     Release,
     ShowConfiguration,
@@ -418,3 +419,52 @@ def test_driver_implements_start_and_stop_jogging(lifecycle_interface):
 
     driver.change_state(Transition.TRANSITION_DEACTIVATE)
     driver.change_state(Transition.TRANSITION_CLEANUP)
+
+
+def test_driver_implements_move_to_absolute_position_with_or_without_gpe(
+    lifecycle_interface,
+):
+    driver = lifecycle_interface
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    node = Node("move_to_absolute_position_service_with_or_without_gpe")
+
+    for gripper in driver.list_grippers():
+        service_name = f"/schunk/driver/{gripper}/move_to_absolute_position"
+
+        client = node.create_client(MoveToAbsolutePositionGPE, service_name)
+        if client.wait_for_service(timeout_sec=1.0):
+            gpe_supported = True
+        else:
+            client.destroy()
+            client = node.create_client(MoveToAbsolutePosition, service_name)
+            assert client.wait_for_service(
+                timeout_sec=2
+            ), f"{gripper}: service unavailable"
+            gpe_supported = False
+
+        if gpe_supported:
+            req = MoveToAbsolutePositionGPE.Request()
+            print(MoveToAbsolutePositionGPE.Request())
+            req.position = 0.01
+            req.velocity = 0.01
+            assert hasattr(req, "use_gpe"), f"{gripper}: use_gpe expected but not found"
+            req.use_gpe = False
+        else:
+            req = MoveToAbsolutePosition.Request()
+            print(MoveToAbsolutePosition.Request())
+            req.position = 0.01
+            req.velocity = 0.01
+            assert not hasattr(
+                req, "use_gpe"
+            ), f"{gripper}: use_gpe not expected but found"
+
+        future = client.call_async(req)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=5)
+        assert future.result() is not None, f"{gripper}: no response from service"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+
+    node.destroy_node()
