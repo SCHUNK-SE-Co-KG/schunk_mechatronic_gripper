@@ -17,6 +17,7 @@ rosidl_generate_interfaces(
     srv/MoveToAbsolutePosition.srv
     srv/MoveToAbsolutePositionGPE.srv
     srv/Grip.srv
+    srv/GripGPE.srv
     srv/Release.srv
     srv/ShowConfiguration.srv
     srv/ShowGripperSpecification.srv

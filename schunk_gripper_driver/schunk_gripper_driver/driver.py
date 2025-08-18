@@ -26,6 +26,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     MoveToAbsolutePosition,
     MoveToAbsolutePositionGPE,
     Grip,
+    GripGPE,
     Release,
     StartJogging,
     StartJoggingGPE,
@@ -428,14 +429,19 @@ class Driver(Node):
                 )
             )
 
+            if gripper["driver"].gpe_available():
+                ServiceType = GripGPE
+            else:
+                ServiceType = Grip
             self.gripper_services.append(
                 self.create_service(
-                    Grip,
+                    ServiceType,
                     f"~/{gripper_id}/grip",
                     partial(self._grip_cb, gripper=gripper),
                     callback_group=self.gripper_services_cb_group,
                 )
             )
+
             self.gripper_services.append(
                 self.create_service(
                     Release,
@@ -851,22 +857,25 @@ class Driver(Node):
 
     def _grip_cb(
         self,
-        request: Grip.Request,
-        response: Grip.Response,
+        request,
+        response,
         gripper: Gripper,
     ):
         self.get_logger().debug("---> Grip")
+
+        use_gpe = getattr(request, "use_gpe", False)
+
         if self.needs_synchronize(gripper):
             response.success = gripper["driver"].grip(
                 force=request.force,
-                use_gpe=request.use_gpe,
+                use_gpe=use_gpe,
                 outward=request.outward,
                 scheduler=self.scheduler,
             )
         else:
             response.success = gripper["driver"].grip(
                 force=request.force,
-                use_gpe=request.use_gpe,
+                use_gpe=use_gpe,
                 outward=request.outward,
             )
         response.message = gripper["driver"].get_status_diagnostics()
