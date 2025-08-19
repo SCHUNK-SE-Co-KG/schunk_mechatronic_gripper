@@ -35,13 +35,10 @@ def create_webserver(dummy: Dummy):
         background_tasks.add_task(dummy.update, msg)
         return {"result": 0}
 
-    @webserver.get("/adi/{path}")
+    @webserver.get("/adi/data.json")
     async def get(request: Request):
-        path = request.path_params["path"]
         params = dict(request.query_params)
-        if path == "data.json":
-            return dummy.get_data(params)
-        return None
+        return dummy.get_data(params)
 
     return webserver
 
