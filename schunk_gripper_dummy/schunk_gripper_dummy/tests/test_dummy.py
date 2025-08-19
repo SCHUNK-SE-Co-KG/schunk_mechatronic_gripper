@@ -195,7 +195,7 @@ def test_dummy_moves_to_absolute_position():
             "value": control_double_word + set_position + set_speed + gripping_force,
         }
 
-        dummy.post(command)
+        dummy.update(command)
         assert dummy.get_actual_position() == pytest.approx(target_pos, rel=1e-3)
         assert dummy.get_status_bit(bit=13) == 1  # position reached
         assert dummy.get_status_bit(bit=4) == 1  # command successfully processed
@@ -217,7 +217,7 @@ def test_dummy_rejects_invalid_speeds_for_move_absolute_commands():
             "value": control_double_word + set_position + set_speed + gripping_force,
         }
 
-        dummy.post(command)
+        dummy.update(command)
 
         # Dummy shouldn't move
         assert dummy.get_actual_position() == pytest.approx(expected_position, rel=1e-3)
@@ -240,7 +240,7 @@ def test_dummy_moves_to_relative_position():
         "value": control_double_word + set_position + set_speed + gripping_force,
     }
     before = dummy.get_actual_position()
-    dummy.post(command)
+    dummy.update(command)
     after = dummy.get_actual_position()
     assert after < before  # we are decreasing
     assert after == pytest.approx(before + target_pos, rel=1e-3)

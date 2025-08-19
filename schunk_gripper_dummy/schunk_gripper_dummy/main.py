@@ -20,7 +20,7 @@ def create_webserver(dummy: Dummy):
     )
 
     @webserver.post("/adi/update.json")
-    async def post(
+    async def update(
         inst: str = Form(...),
         value: str = Form(...),
         elem: Optional[int] = Form(None),
@@ -32,7 +32,7 @@ def create_webserver(dummy: Dummy):
             return {"result": 1}
         if not all(digit in string.hexdigits for digit in str(msg["value"])):
             return {"result": 1}
-        background_tasks.add_task(dummy.post, msg)
+        background_tasks.add_task(dummy.update, msg)
         return {"result": 0}
 
     @webserver.get("/adi/{path}")

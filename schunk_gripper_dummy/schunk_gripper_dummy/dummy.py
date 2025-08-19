@@ -151,7 +151,7 @@ class Dummy(object):
             self.set_actual_speed(actual_speed)
             time.sleep(0.01)
 
-    def post(self, msg: dict) -> dict:
+    def update(self, msg: dict) -> dict:
         self.data[msg["inst"]] = [msg["value"]]
         if msg["inst"] == self.plc_output:
             self.plc_output_buffer = bytearray(bytes.fromhex(msg["value"]))

@@ -33,24 +33,24 @@ def test_dummy_survives_invalid_data_requests():
     assert dummy.get_data(query) == expected
 
 
-def test_dummy_stores_post_requests():
+def test_dummy_stores_update_requests():
     dummy = Dummy()
 
     # Using the plc command variable
     msg = "00112233445566778899AABBCCDDEEFF"
     data = {"inst": dummy.plc_output, "value": msg}
-    dummy.post(data)
+    dummy.update(data)
     assert dummy.data[dummy.plc_output] == [msg]
 
     # Using general variables
     msg = "AABBCCDD"
     inst = "0x0238"
     data = {"inst": inst, "value": msg}
-    dummy.post(data)
+    dummy.update(data)
     assert dummy.data[inst] == [msg]
 
 
-def test_dummy_rejects_invalid_post_requests():
+def test_dummy_rejects_invalid_update_requests():
     dummy = Dummy()
     dummy.start()
     server = create_webserver(dummy)
@@ -74,14 +74,14 @@ def test_dummy_rejects_invalid_post_requests():
     dummy.stop()
 
 
-def test_dummy_resets_success_status_bits_with_new_post_requests():
+def test_dummy_resets_success_status_bits_with_new_update_requests():
     dummy = Dummy()
     dummy.set_status_bit(bit=13, value=True)  # position reached
     dummy.set_status_bit(bit=4, value=True)  # command successful
     dummy.set_status_bit(bit=12, value=True)  # workpiece gripped
     empty_command = "01" + "".zfill(30)  # only fast stop active
     data = {"inst": dummy.plc_output, "value": empty_command}
-    dummy.post(data)
+    dummy.update(data)
     assert dummy.get_status_bit(bit=13) == 0
     assert dummy.get_status_bit(bit=4) == 0
     assert dummy.get_status_bit(bit=12) == 0
