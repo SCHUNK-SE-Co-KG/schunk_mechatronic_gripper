@@ -3,7 +3,7 @@ from threading import Lock
 from pymodbus.client import ModbusSerialClient
 from pymodbus.pdu import ModbusPDU
 import re
-from threading import Thread
+from threading import Thread, Event
 import time
 from httpx import Client, ConnectError, ConnectTimeout
 from importlib.resources import files
@@ -119,6 +119,8 @@ class Driver(object):
         self.connected: bool = False
         self.polling_thread: Thread = Thread()
         self.update_cycle: float = 0.05  # sec
+        self.disconnect_request: Event = Event()
+        self.reconnect_interval: float = 1.0
 
     def connect(
         self,
@@ -204,10 +206,10 @@ class Driver(object):
         return self.connected
 
     def disconnect(self) -> bool:
-        self.connected = False
         self.module = ""
         self.fieldbus = ""
         self.gripper = ""
+        self.disconnect_request.set()
         if self.polling_thread.is_alive():
             self.polling_thread.join()
 
@@ -219,6 +221,7 @@ class Driver(object):
             with self.web_client_lock:
                 self.web_client = None
 
+        self.connected = False
         self.update_module_parameters()
         return True
 
@@ -561,7 +564,7 @@ class Driver(object):
                 for reg in pdu.registers:
                     result.extend(reg.to_bytes(2, byteorder="big"))
 
-        if self.web_client and self.connected:
+        if self.web_client:
             params = {"inst": param, "count": "1"}
             with self.web_client_lock:
                 response = self.web_client.get(
@@ -841,9 +844,20 @@ class Driver(object):
             return True
 
     def _module_update(self, update_cycle: float) -> None:
-        while self.connected:
-            self.receive_plc_input()
-            time.sleep(update_cycle)
+        self.disconnect_request.clear()
+        count = 0
+        while not self.disconnect_request.is_set():
+            if self.receive_plc_input():
+                self.connected = True
+                count = 0
+                time.sleep(update_cycle)
+            else:
+                self.connected = False
+                count += 1
+                if count < 3:
+                    time.sleep(update_cycle)
+                else:
+                    time.sleep(self.reconnect_interval)
 
     def _trace_packet(self, sending: bool, data: bytes) -> bytes:
         txt = "REQUEST stream" if sending else "RESPONSE stream"
