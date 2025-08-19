@@ -395,6 +395,35 @@ class Driver(object):
                 return False
             return check()
 
+    def grip_at_position(
+        self,
+        position: int,
+        force: int,
+        use_gpe: bool = False,
+        outward: bool = False,
+        velocity: int = 0,
+        scheduler: Scheduler | None = None,
+    ) -> bool:
+        if not self.connected:
+            return False
+
+        move = self.move_to_absolute_position(
+            position=position,
+            velocity=velocity,
+            use_gpe=use_gpe,
+            scheduler=scheduler,
+        )
+        if not move:
+            return False
+
+        grip = self.grip(
+            force=force,
+            use_gpe=use_gpe,
+            outward=outward,
+            scheduler=scheduler,
+        )
+        return grip
+
     def release(
         self, use_gpe: bool = False, scheduler: Scheduler | None = None
     ) -> bool:

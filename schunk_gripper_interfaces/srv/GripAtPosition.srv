@@ -1,0 +1,10 @@
+int8 force    # Percentage points of the gripper's max. gripping force.
+              # Tolerated values in [50, 100]
+
+bool outward  # Whether to open the gripper for grasping.
+              # Defaults to False.
+
+int8 at_position  # Position to grip at
+---
+bool success
+string message
