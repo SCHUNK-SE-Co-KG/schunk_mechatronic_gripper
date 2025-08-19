@@ -376,3 +376,21 @@ def test_dummy_supports_grip_at_position():
     assert dummy.get_status_bit(bit=12) == 1  # workpiece gripped
     assert dummy.get_status_bit(bit=4) == 1  # command successfully processed
     assert dummy.get_status_bit(bit=31) == 1  # GPE activated
+
+
+def test_dummy_handles_events():
+    dummy = Dummy()
+    assert dummy.reachable
+
+    events = {}
+    assert dummy.handle_events(events)
+
+    # Connection loss
+    duration = 0.2
+    buffer = 0.5
+    events = {"lose_connection_sec": duration}
+    for _ in range(3):
+        assert dummy.handle_events(events)
+        assert not dummy.reachable
+        time.sleep(duration + buffer)
+        assert dummy.reachable

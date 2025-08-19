@@ -1,4 +1,4 @@
-from threading import Thread
+from threading import Thread, Timer
 import time
 from importlib.resources import files
 import json
@@ -75,6 +75,7 @@ class Dummy(object):
             raise ValueError("Unknown parameter set")
 
         self.starttime = time.time()
+        self.reachable = True
         self.thread = Thread(target=self._run)
         self.running = False
         self.done = False
@@ -128,6 +129,16 @@ class Dummy(object):
             self.set_system_uptime(int(elapsed))
             time.sleep(1)
         print("Done")
+
+    def handle_events(self, events: dict) -> bool:
+        if "lose_connection_sec" in events:
+            self.reachable = False
+
+            def reset() -> None:
+                self.reachable = True
+
+            Timer(interval=events["lose_connection_sec"], function=reset).start()
+        return True
 
     def acknowledge(self) -> None:
         self.set_status_bit(bit=0, value=True)

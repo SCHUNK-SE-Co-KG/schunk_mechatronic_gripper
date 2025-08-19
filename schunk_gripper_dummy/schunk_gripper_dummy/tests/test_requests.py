@@ -1,6 +1,7 @@
 from schunk_gripper_dummy.dummy import Dummy
 from schunk_gripper_dummy.main import create_webserver
 from fastapi.testclient import TestClient
+import time
 
 
 def test_dummy_responds_correctly_to_data_instance_requests():
@@ -85,3 +86,22 @@ def test_dummy_resets_success_status_bits_with_new_update_requests():
     assert dummy.get_status_bit(bit=13) == 0
     assert dummy.get_status_bit(bit=4) == 0
     assert dummy.get_status_bit(bit=12) == 0
+
+
+def test_dummy_can_mimic_connection_loss():
+    dummy = Dummy()
+    dummy.start()
+    server = create_webserver(dummy)
+    client = TestClient(server)
+
+    # Temporarily shutdown the data route
+    for _ in range(3):
+        until_back = 0.5
+        events = {"lose_connection_sec": until_back}
+        assert client.post("/adi/events.json", json=events).is_success
+        assert not client.get("/adi/data.json").is_success
+
+        time.sleep(until_back)
+        assert client.get("/adi/data.json").is_success
+
+    dummy.stop()

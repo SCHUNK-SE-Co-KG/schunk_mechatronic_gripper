@@ -1,7 +1,7 @@
 import argparse
 import uvicorn
 from schunk_gripper_dummy.dummy import Dummy
-from fastapi import FastAPI, Request, Form, BackgroundTasks
+from fastapi import FastAPI, Request, Form, Body, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import string
@@ -35,8 +35,14 @@ def create_webserver(dummy: Dummy):
         background_tasks.add_task(dummy.update, msg)
         return {"result": 0}
 
+    @webserver.post("/adi/events.json")
+    async def events(events: dict = Body(...)):
+        return dummy.handle_events(events=events)
+
     @webserver.get("/adi/data.json")
     async def get(request: Request):
+        if not dummy.reachable:
+            raise HTTPException(status_code=503)
         params = dict(request.query_params)
         return dummy.get_data(params)
 
