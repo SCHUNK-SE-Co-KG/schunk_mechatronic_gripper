@@ -401,12 +401,14 @@ class Driver(object):
         force: int,
         use_gpe: bool = False,
         outward: bool = False,
-        velocity: int = 0,
         scheduler: Scheduler | None = None,
     ) -> bool:
         if not self.connected:
             return False
 
+        specs = self.show_specification()
+        max_speed = float(specs.get("max_speed", 0))
+        velocity = int((force / 100.0) * max_speed)
         move = self.move_to_absolute_position(
             position=position,
             velocity=velocity,
