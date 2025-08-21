@@ -30,8 +30,25 @@ def test_driver_automatically_reestablishes_connection():
 
 
 @skip_without_gripper
-def test_driver_handles_httpx_exceptions_during_polling(simulate_httpx_failure):
+def test_driver_handles_httpx_exceptions_on_startup(simulate_httpx_failure):
 
+    # Check httpx.ConnectError
+    simulate_httpx_failure["exception"] = httpx.ConnectError("Simulated connect error")
+    driver = Driver()
+    assert not driver.connect(host="0.0.0.0", port=8000)
+    driver.disconnect()
+
+    # Check httpx.ConnectTimeout
+    simulate_httpx_failure["exception"] = httpx.ConnectTimeout(
+        "Simulated connect timeout"
+    )
+    driver = Driver()
+    assert not driver.connect(host="0.0.0.0", port=8000)
+    driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_handles_httpx_exceptions_during_polling(simulate_httpx_failure):
     driver = Driver()
     assert driver.connect(host="0.0.0.0", port=8000)
 
