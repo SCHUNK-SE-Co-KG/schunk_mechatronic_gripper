@@ -626,7 +626,12 @@ class Driver(Node):
                     msg.connected.append(driver.connected)
 
             if now >= next_time:
-                self.connection_state_publisher.publish(msg)
+                try:
+                    self.connection_state_publisher.publish(msg)
+
+                # Catch "publisher's context is invalid" on node destruction
+                except RuntimeError:
+                    break
                 next_time += self.connection_status_period
             else:
                 time.sleep(max(0, next_time - now))
