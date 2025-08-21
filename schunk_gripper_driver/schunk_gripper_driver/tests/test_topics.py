@@ -77,9 +77,9 @@ def test_driver_publishes_joint_states(lifecycle_interface):
             1,
         )
 
-    for _ in range(10):
-        rclpy.spin_once(driver.node)
-        time.sleep(0.1)
+    timeout = time.time() + 1.0
+    while time.time() < timeout and len(messages) == 0:
+        rclpy.spin_once(driver.node, timeout_sec=0.1)
 
     driver.change_state(Transition.TRANSITION_DEACTIVATE)
     driver.change_state(Transition.TRANSITION_CLEANUP)
@@ -131,9 +131,9 @@ def test_driver_publishes_gripper_state(lifecycle_interface):
             1,
         )
 
-    for _ in range(10):
-        rclpy.spin_once(driver.node)
-        time.sleep(0.1)
+    timeout = time.time() + 1.0
+    while time.time() < timeout and len(messages) == 0:
+        rclpy.spin_once(driver.node, timeout_sec=0.1)
 
     driver.change_state(Transition.TRANSITION_DEACTIVATE)
     driver.change_state(Transition.TRANSITION_CLEANUP)
