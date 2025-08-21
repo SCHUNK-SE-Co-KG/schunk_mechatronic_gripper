@@ -513,6 +513,10 @@ def test_driver_uses_separate_callback_group_for_publishers(ros2: None):
         for handler in publisher.event_handlers:
             assert handler.callback_group != driver.default_callback_group
 
+    # Connection state
+    for handler in driver.connection_state_publisher.event_handlers:
+        assert handler.callback_group != driver.default_callback_group
+
     # Timers
     assert driver.joint_states_timer.callback_group != driver.default_callback_group
     assert driver.gripper_states_timer.callback_group != driver.default_callback_group
@@ -594,3 +598,11 @@ def test_driver_uses_separate_callback_group_for_gripper_services(ros2: None):
 
     driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
+
+
+def test_driver_uses_a_dedicated_thread_for_connection_status(ros2):
+    driver = Driver("driver")
+    assert driver.connection_status_thread.is_alive()
+
+    driver.on_shutdown(state=None)
+    assert not driver.connection_status_thread.is_alive()
