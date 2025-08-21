@@ -5,7 +5,7 @@ from pymodbus.pdu import ModbusPDU
 import re
 from threading import Thread, Event
 import time
-from httpx import Client, ConnectError, ConnectTimeout
+from httpx import Client, ConnectError, ConnectTimeout, ReadTimeout
 from importlib.resources import files
 from typing import Union
 import json
@@ -567,9 +567,12 @@ class Driver(object):
         if self.web_client:
             params = {"inst": param, "count": "1"}
             with self.web_client_lock:
-                response = self.web_client.get(
-                    f"http://{self.host}:{self.port}/adi/data.json", params=params
-                )
+                try:
+                    response = self.web_client.get(
+                        f"http://{self.host}:{self.port}/adi/data.json", params=params
+                    )
+                except (ReadTimeout, ConnectError, ConnectTimeout):
+                    return result
             if response.is_success:
                 result = bytearray(bytes.fromhex(response.json()[0]))
 

@@ -35,11 +35,36 @@ def test_driver_handles_httpx_exceptions_during_polling(simulate_httpx_failure):
     driver = Driver()
     assert driver.connect(host="0.0.0.0", port=8000)
 
-    # Interrupt the driver's polling thread
-    time.sleep(1)
-    simulate_httpx_failure["exception"] = httpx.ReadTimeout("Simulated read timeout")
+    # Simulate different httpx exceptions
+    # and check that the driver automatically reconnects
 
-    time.sleep(0.1)
+    # Check httpx.ReadTimeout
+    simulate_httpx_failure["exception"] = httpx.ReadTimeout("Simulated read timeout")
+    time.sleep(0.5)
     assert driver.polling_thread.is_alive()
+    assert not driver.connected
+    simulate_httpx_failure["exception"] = None
+    time.sleep(driver.reconnect_interval)
+    assert driver.connected
+
+    # Check httpx.ConnectError
+    simulate_httpx_failure["exception"] = httpx.ConnectError("Simulated connect error")
+    time.sleep(0.5)
+    assert driver.polling_thread.is_alive()
+    assert not driver.connected
+    simulate_httpx_failure["exception"] = None
+    time.sleep(driver.reconnect_interval)
+    assert driver.connected
+
+    # Check httpx.ConnectTimeout
+    simulate_httpx_failure["exception"] = httpx.ConnectTimeout(
+        "Simulated connect timeout"
+    )
+    time.sleep(0.5)
+    assert driver.polling_thread.is_alive()
+    assert not driver.connected
+    simulate_httpx_failure["exception"] = None
+    time.sleep(driver.reconnect_interval)
+    assert driver.connected
 
     driver.disconnect()
