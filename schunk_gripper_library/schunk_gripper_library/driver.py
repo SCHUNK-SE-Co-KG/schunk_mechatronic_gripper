@@ -4,6 +4,7 @@ from pymodbus.client import ModbusSerialClient
 from pymodbus.pdu import ModbusPDU
 import re
 from threading import Thread
+from threading import Lock
 import time
 from httpx import Client, ConnectError, ConnectTimeout
 from importlib.resources import files
@@ -47,6 +48,8 @@ class NonExclusiveSerialClient(ModbusSerialClient):
 
 class Driver(object):
     def __init__(self) -> None:
+        self.jointStateCallback = None
+        self.gripperStateCallback = None
         self.plc_input: str = "0x0040"
         self.plc_output: str = "0x0048"
         self.error_byte: int = 12
@@ -120,6 +123,10 @@ class Driver(object):
         self.polling_thread: Thread = Thread()
         self.update_cycle: float = 0.05  # sec
 
+    def setCallbacks(self, jointStateCallback: partial, gripperStateCallback: partial):
+        self.jointStateCallback = jointStateCallback
+        self.gripperStateCallback = gripperStateCallback
+
     def connect(
         self,
         host: str = "",
@@ -172,14 +179,12 @@ class Driver(object):
                     trace_pdu=None,
                 )
                 self.connected = self.mb_client.connect()
-
         if self.connected:
             if not (data := self.read_module_parameter("0x1130")):
                 return False
             self.fieldbus = self.valid_fieldbus_types.get(
                 str(struct.unpack("h", data)[0]), ""
             )
-
             if update_cycle:
                 self.update_cycle = update_cycle
                 self.polling_thread = Thread(
@@ -623,8 +628,7 @@ class Driver(object):
         while not all(
             [self.get_status_bit(int(bit)) == value for bit, value in bits.items()]
         ):
-            time.sleep(0.001)
-            self.receive_plc_input()
+            time.sleep(0.05)
             if time.time() > max_duration:
                 return False
         return True
@@ -843,6 +847,10 @@ class Driver(object):
     def _module_update(self, update_cycle: float) -> None:
         while self.connected:
             self.receive_plc_input()
+            if self.jointStateCallback:
+                self.jointStateCallback()
+            if self.gripperStateCallback:
+                self.gripperStateCallback()
             time.sleep(update_cycle)
 
     def _trace_packet(self, sending: bool, data: bytes) -> bytes:
