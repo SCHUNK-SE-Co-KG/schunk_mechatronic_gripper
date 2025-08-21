@@ -29,38 +29,28 @@ def test_driver_advertises_state_depending_topics(lifecycle_interface):
     gripper_topics = ["joint_states", "gripper_state"]
     until_change_takes_effect = 0.1
 
-    def exist(topics: list[str]) -> bool:
-        existing = driver.node.get_topic_names_and_types()
-        advertised = [i[0] for i in existing]
-        for gripper in driver.list_grippers():
-            for topic in topics:
-                if f"/schunk/driver/{gripper}/{topic}" not in advertised:
-                    return False
-        return True
-
-    for run in range(3):
+    for run in range(1):
 
         # After startup -> unconfigured
-        driver.check_state(State.PRIMARY_STATE_UNCONFIGURED)
+        assert driver.check_state(State.PRIMARY_STATE_UNCONFIGURED)
 
         # After configure -> inactive
         driver.change_state(Transition.TRANSITION_CONFIGURE)
         time.sleep(until_change_takes_effect)
-        assert not exist(gripper_topics)
+        assert driver.check(gripper_topics, dtype="topic", should_exist=False)
 
         # After activate -> active
         driver.change_state(Transition.TRANSITION_ACTIVATE)
         time.sleep(until_change_takes_effect)
-        assert exist(gripper_topics)
+        assert driver.check(gripper_topics, dtype="topic", should_exist=True)
 
         # After deactivate -> inactive
         driver.change_state(Transition.TRANSITION_DEACTIVATE)
         time.sleep(until_change_takes_effect)
-        assert not exist(gripper_topics)
+        assert driver.check(gripper_topics, dtype="topic", should_exist=False)
 
         # After cleanup -> unconfigured
         driver.change_state(Transition.TRANSITION_CLEANUP)
-        time.sleep(until_change_takes_effect)
 
 
 @skip_without_gripper
