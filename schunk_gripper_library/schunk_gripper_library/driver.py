@@ -351,6 +351,7 @@ class Driver(object):
     def grip(
         self,
         force: int,
+        position: int | None = None,
         use_gpe: bool = False,
         outward: bool = False,
         scheduler: Scheduler | None = None,
@@ -359,29 +360,48 @@ class Driver(object):
             return False
         if not self.set_gripping_force(force):
             return False
+        if position is not None and not isinstance(position, int):
+            return False
+
+        if position is not None:
+            trigger_bit = 16
+        else:
+            trigger_bit = 12
 
         def start() -> bool:
             self.clear_plc_output()
             self.send_plc_output()
 
             cmd_toggle_before = self.get_status_bit(bit=5)
-            self.set_control_bit(bit=12, value=True)
+            self.set_control_bit(bit=trigger_bit, value=True)
             self.set_control_bit(bit=7, value=outward)
             if self.gpe_available():
                 self.set_control_bit(bit=31, value=use_gpe)
             else:
                 self.set_control_bit(bit=31, value=False)
             self.set_gripping_force(force)
+            if position is not None:
+                self.set_target_position(position)
             self.set_target_speed(0)
             self.send_plc_output()
             desired_bits = {"5": cmd_toggle_before ^ 1, "3": 0}
             return self.wait_for_status(bits=desired_bits, timeout_sec=0.1)
 
         def check() -> bool:
+            if self.get_status_bit(11):
+                return False
+            if position is not None and self.get_status_bit(17):
+                return False
             desired_bits = {"4": 1, "12": 1}
             return self.wait_for_status(bits=desired_bits)
 
-        duration_sec = self.estimate_duration(force=force, outward=outward)
+        if position is not None:
+            duration_sec = self.estimate_duration(
+                position_abs=position, force=force, outward=outward
+            )
+        else:
+            duration_sec = self.estimate_duration(force=force, outward=outward)
+
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
                 return False
@@ -394,37 +414,6 @@ class Driver(object):
             if self.error_in(duration_sec):
                 return False
             return check()
-
-    def grip_at_position(
-        self,
-        position: int,
-        force: int,
-        use_gpe: bool = False,
-        outward: bool = False,
-        scheduler: Scheduler | None = None,
-    ) -> bool:
-        if not self.connected:
-            return False
-
-        specs = self.show_specification()
-        max_speed = float(specs.get("max_speed", 0))
-        velocity = int((force / 100.0) * max_speed)
-        move = self.move_to_absolute_position(
-            position=position,
-            velocity=velocity,
-            use_gpe=use_gpe,
-            scheduler=scheduler,
-        )
-        if not move:
-            return False
-
-        grip = self.grip(
-            force=force,
-            use_gpe=use_gpe,
-            outward=outward,
-            scheduler=scheduler,
-        )
-        return grip
 
     def release(
         self, use_gpe: bool = False, scheduler: Scheduler | None = None
@@ -490,7 +479,7 @@ class Driver(object):
     def estimate_duration(
         self,
         release: bool = False,
-        position_abs: int = 0,
+        position_abs: int | None = None,
         velocity: int = 0,
         force: int = 0,
         outward: bool = False,
@@ -500,11 +489,16 @@ class Driver(object):
                 self.module_parameters["wp_release_delta"]
                 / self.module_parameters["max_vel"]
             )
-        if not isinstance(position_abs, int):
-            return 0.0
-        if isinstance(velocity, int) and velocity > 0:
+
+        if isinstance(position_abs, int):
             still_to_go = position_abs - self.get_actual_position()
-            return abs(still_to_go) / velocity
+            if isinstance(velocity, int) and velocity > 0:
+                return abs(still_to_go) / velocity
+            elif self.module_parameters.get("max_grp_vel"):
+                return abs(still_to_go) / self.module_parameters["max_grp_vel"]
+            else:
+                return 0.0
+
         if isinstance(force, int) and force > 0 and force <= 100:
             if outward:
                 still_to_go = (

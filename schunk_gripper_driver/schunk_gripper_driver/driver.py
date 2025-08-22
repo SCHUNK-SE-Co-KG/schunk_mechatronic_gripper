@@ -879,12 +879,16 @@ class Driver(Node):
         self.get_logger().debug("---> Grip")
 
         use_gpe = getattr(request, "use_gpe", False)
-        at_position = hasattr(request, "at_position")
+
+        if hasattr(request, "at_position"):
+            at_position = request.at_position
+        else:
+            at_position = None
 
         if self.needs_synchronize(gripper):
-            if at_position:
-                response.success = gripper["driver"].grip_at_position(
-                    position=request.at_position,
+            if at_position is not None:
+                response.success = gripper["driver"].grip(
+                    position=at_position,
                     force=request.force,
                     use_gpe=use_gpe,
                     outward=request.outward,
@@ -898,9 +902,9 @@ class Driver(Node):
                     scheduler=self.scheduler,
                 )
         else:
-            if at_position:
-                response.success = gripper["driver"].grip_at_position(
-                    position=request.at_position,
+            if at_position is not None:
+                response.success = gripper["driver"].grip(
+                    position=at_position,
                     force=request.force,
                     use_gpe=use_gpe,
                     outward=request.outward,
@@ -911,6 +915,7 @@ class Driver(Node):
                     use_gpe=use_gpe,
                     outward=request.outward,
                 )
+
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 

@@ -266,11 +266,12 @@ def test_driver_implements_grip_and_release(lifecycle_interface):
 
     # Get the gripper's services
     for gripper in driver.list_grippers():
-        grip_client = node.create_client(
-            Grip,
-            f"/schunk/driver/{gripper}/grip",
-        )
+        try:
+            grip_client = node.create_client(GripGPE, f"/schunk/driver/{gripper}/grip")
+        except (TypeError, NameError):
+            grip_client = node.create_client(Grip, f"/schunk/driver/{gripper}/grip")
         assert grip_client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
+
         release_client = node.create_client(
             Release,
             f"/schunk/driver/{gripper}/release",
@@ -286,9 +287,10 @@ def test_driver_implements_grip_and_release(lifecycle_interface):
         for target in targets:
 
             # Grip
-            request = Grip.Request()
+            request = grip_client.srv_type.Request()
             request.force = target["force"]
-            request.use_gpe = target["use_gpe"]
+            if hasattr(request, "use_gpe"):
+                request.use_gpe = target["use_gpe"]
             request.outward = target["outward"]
             future = grip_client.call_async(request)
             rclpy.spin_until_future_complete(node, future)
