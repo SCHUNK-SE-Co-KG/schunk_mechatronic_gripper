@@ -4,8 +4,12 @@ from schunk_gripper_library.utility import skip_without_gripper
 
 @skip_without_gripper
 def test_driver_supports_profinet_grippers():
+
+    # Either connect to a real PROFINET gripper or
+    # start the web dummy with a PROFINET gripper before running this test.
+
     driver = Driver()
-    assert driver.connect(host="192.168.0.42", port=80)
+    assert driver.connect(host="0.0.0.0", port=8000)
 
     assert driver.acknowledge()
 
