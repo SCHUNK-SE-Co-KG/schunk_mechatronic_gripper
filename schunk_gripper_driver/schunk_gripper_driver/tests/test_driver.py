@@ -191,6 +191,56 @@ def test_driver_checks_if_grippers_need_synchronization(ros2: None):
         assert not driver.needs_synchronize(gripper)
 
 
+def test_driver_doesnt_synchronize_empty_serial_ports(ros2):
+    driver = Driver("driver")
+    assert driver.reset_grippers()
+    assert driver.add_gripper(host="192.168.0.2", port=8000)
+
+    other = Gripper(
+        {
+            "host": "192.168.0.3",
+            "port": 8000,
+            "serial_port": "",
+            "device_id": 0,
+            "driver": GripperDriver(),
+            "gripper_id": "",
+        }
+    )
+    driver.grippers.append(other)
+    assert not driver.needs_synchronize(other)
+
+
+def test_driver_synchronizes_ethernet_grippers_with_nonempty_serial_ports(ros2):
+    driver = Driver("driver")
+    assert driver.reset_grippers()
+
+    one = Gripper(
+        {
+            "host": "192.168.0.2",
+            "port": 8000,
+            "serial_port": "this will allow to run Ethernet grippers with a scheduler",
+            "device_id": 0,
+            "driver": GripperDriver(),
+            "gripper_id": "",
+        }
+    )
+    driver.grippers.append(one)
+    two = Gripper(
+        {
+            "host": "192.168.0.3",
+            "port": 8000,
+            "serial_port": "this will allow to run Ethernet grippers with a scheduler",
+            "device_id": 0,
+            "driver": GripperDriver(),
+            "gripper_id": "",
+        }
+    )
+    driver.grippers.append(two)
+
+    assert driver.needs_synchronize(one)
+    assert driver.needs_synchronize(two)
+
+
 @skip_without_gripper
 def test_driver_offers_callbacks_for_acknowledge_and_fast_stop(ros2: None):
     driver = Driver("driver")

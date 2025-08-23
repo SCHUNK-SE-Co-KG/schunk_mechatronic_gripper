@@ -281,7 +281,11 @@ class Driver(Node):
         return True
 
     def needs_synchronize(self, gripper: Gripper) -> bool:
-        serial_ports = [gripper["serial_port"] for gripper in self.grippers]
+        serial_ports = [
+            gripper["serial_port"]
+            for gripper in self.grippers
+            if gripper["serial_port"]
+        ]
         if serial_ports.count(gripper["serial_port"]) > 1:
             return True
         return False
