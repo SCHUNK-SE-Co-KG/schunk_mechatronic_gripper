@@ -98,3 +98,22 @@ def test_driver_handles_pymodbus_exceptions_on_startup(simulate_pymodbus_failure
     driver = Driver()
     assert not driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
     driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_handles_pymodbus_exceptions_during_polling(simulate_pymodbus_failure):
+    driver = Driver()
+    assert driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
+
+    # Check that the driver automatically reconnects
+
+    # Check pymodbus.exceptions.ModbusIOException
+    simulate_pymodbus_failure["exception"] = pymodbus.exceptions.ModbusIOException(
+        "Simulated IO error"
+    )
+    time.sleep(0.5)
+    assert driver.polling_thread.is_alive()
+    assert not driver.connected
+    simulate_pymodbus_failure["exception"] = None
+    time.sleep(driver.reconnect_interval)
+    assert driver.connected
