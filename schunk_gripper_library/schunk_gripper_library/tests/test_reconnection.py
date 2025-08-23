@@ -1,6 +1,6 @@
 from schunk_gripper_library.driver import Driver
 from schunk_gripper_library.utility import skip_without_gripper
-from .etc.events import lose_connection
+from .etc.events import lose_tcp_connection, lose_modbus_connection
 import time
 import httpx
 import pymodbus
@@ -13,14 +13,34 @@ def test_driver_has_reconnection_interval():
 
 
 @skip_without_gripper
-def test_driver_automatically_reestablishes_connection():
+def test_driver_automatically_reestablishes_tcp_connection():
     driver = Driver()
     assert driver.connect(host="0.0.0.0", port=8000)
 
     # Cut the connection to the gripper
     # and check that the driver reestablishes it automatically.
     downtime = 1.23
-    assert lose_connection(duration_sec=downtime)
+    assert lose_tcp_connection(duration_sec=downtime)
+    time.sleep(0.1)
+    assert not driver.connected
+
+    time.sleep(downtime + driver.reconnect_interval)
+    assert driver.connected
+
+    driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_automatically_reestablishes_modbus_connection():
+    driver = Driver()
+    assert driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
+
+    downtime = 0.5
+    assert lose_modbus_connection(duration_sec=downtime)
+
+    # Modbus has several seconds default timeouts,
+    # but we need to react fast to inform high-level callers about
+    # the connection status
     time.sleep(0.1)
     assert not driver.connected
 
