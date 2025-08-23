@@ -13,6 +13,7 @@ from .utility import Scheduler, supports_parity
 from functools import partial
 from pymodbus.logging import Log
 import serial  # type: ignore [import-untyped]
+from pymodbus.exceptions import ModbusIOException
 
 
 class NonExclusiveSerialClient(ModbusSerialClient):
@@ -552,12 +553,16 @@ class Driver(object):
 
         if self.mb_client and self.mb_client.connected:
             with self.mb_client_lock:
-                pdu = self.mb_client.read_holding_registers(
-                    address=int(param, 16) - 1,
-                    count=int(self.readable_parameters[param]["registers"]),
-                    slave=self.mb_device_id,
-                    no_response_expected=False,
-                )
+                try:
+                    pdu = self.mb_client.read_holding_registers(
+                        address=int(param, 16) - 1,
+                        count=int(self.readable_parameters[param]["registers"]),
+                        slave=self.mb_device_id,
+                        no_response_expected=False,
+                    )
+                except ModbusIOException:
+                    return result
+
             # Parse each 2-byte register,
             # reverting pymodbus' internal big endian decoding.
             if not pdu.isError():

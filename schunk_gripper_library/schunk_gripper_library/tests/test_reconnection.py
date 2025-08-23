@@ -3,6 +3,7 @@ from schunk_gripper_library.utility import skip_without_gripper
 from .etc.events import lose_connection
 import time
 import httpx
+import pymodbus
 
 
 def test_driver_has_reconnection_interval():
@@ -84,4 +85,16 @@ def test_driver_handles_httpx_exceptions_during_polling(simulate_httpx_failure):
     time.sleep(driver.reconnect_interval)
     assert driver.connected
 
+    driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_handles_pymodbus_exceptions_on_startup(simulate_pymodbus_failure):
+
+    # Check pymodbus.exceptions.ModbusIOException
+    simulate_pymodbus_failure["exception"] = pymodbus.exceptions.ModbusIOException(
+        "Simulated IO error"
+    )
+    driver = Driver()
+    assert not driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
     driver.disconnect()
