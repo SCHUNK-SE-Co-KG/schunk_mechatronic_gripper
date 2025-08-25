@@ -490,8 +490,10 @@ class Driver(object):
             data = self.read_module_parameter(self.plc_input)
             if data:
                 self.plc_input_buffer = data
-                return True
-        return False
+                self.connected = True
+            else:
+                self.connected = False
+            return self.connected
 
     def send_plc_output(self) -> bool:
         with self.output_buffer_lock:
