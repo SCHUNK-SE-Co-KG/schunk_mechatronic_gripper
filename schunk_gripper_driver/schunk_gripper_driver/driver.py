@@ -32,10 +32,11 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
     GripperState,
+    ConnectionState,
 )
 from sensor_msgs.msg import JointState
 from std_srvs.srv import Trigger
-from threading import Lock, Timer as Countdown
+from threading import Lock, Thread, Event, Timer as Countdown
 from rclpy.service import Service
 from rclpy.publisher import Publisher
 from rclpy.timer import Timer
@@ -49,6 +50,7 @@ from pathlib import Path
 import tempfile
 import json
 from collections import OrderedDict
+import time
 
 
 class Gripper(TypedDict):
@@ -147,6 +149,20 @@ class Driver(Node):
             callback=partial(self._publish_gripper_states),
             callback_group=self.timers_cb_group,
         )
+
+        # Connection state
+        self.connection_state_publisher: Publisher = self.create_publisher(
+            msg_type=ConnectionState,
+            topic="~/connection_state",
+            qos_profile=1,
+            callback_group=self.publishers_cb_group,
+        )
+        self.connection_status_stop: Event = Event()
+        self.connection_status_period: float = 0.05  # sec
+        self.connection_status_thread: Thread = Thread(
+            target=self._publish_connection_state
+        )
+        self.connection_status_thread.start()
 
     def list_grippers(self) -> list[str]:
         devices = []
@@ -492,6 +508,8 @@ class Driver(Node):
         self.get_logger().debug("on_shutdown() is called.")
         self.joint_states_timer.cancel()
         self.gripper_states_timer.cancel()
+        self.connection_status_stop.set()
+        self.connection_status_thread.join()
 
         if state is None:
             return TransitionCallbackReturn.SUCCESS
@@ -588,6 +606,35 @@ class Driver(Node):
             with self.gripper_state_lock:
                 if gripper_id in self.gripper_state_publishers:
                     self.gripper_state_publishers[gripper_id].publish(msg)
+
+    def _publish_connection_state(self) -> None:
+        msg = ConnectionState()
+        msg.header.frame_id = self.get_name()
+        next_time = time.perf_counter()
+
+        while rclpy.ok() and not self.connection_status_stop.is_set():
+            now = time.perf_counter()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.grippers.clear()
+            msg.connected.clear()
+
+            for gripper in self.grippers:
+                id = gripper["gripper_id"]
+                driver = gripper["driver"]
+                if id:
+                    msg.grippers.append(id)
+                    msg.connected.append(driver.connected)
+
+            if now >= next_time:
+                try:
+                    self.connection_state_publisher.publish(msg)
+
+                # Catch "publisher's context is invalid" on node destruction
+                except RuntimeError:
+                    break
+                next_time += self.connection_status_period
+            else:
+                time.sleep(max(0, next_time - now))
 
     # Service callbacks
     def _add_gripper_cb(

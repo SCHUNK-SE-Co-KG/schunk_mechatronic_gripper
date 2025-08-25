@@ -106,35 +106,43 @@ class LifecycleInterface(object):
         rclpy.spin_until_future_complete(self.node, future)
         return future.result()
 
-    def check_state(self, state_id):
+    def check_state(self, state_id) -> bool:
         req = GetState.Request()
         future = self.get_state_client.call_async(req)
         rclpy.spin_until_future_complete(self.node, future)
         return future.result().current_state.id == state_id
 
-    def check(self, services: list[str], should_exist: bool = True) -> bool:
-        service_names = []
-        for name in services:
+    def check(self, interfaces: list[str], dtype: str, should_exist: bool) -> bool:
+        if dtype not in ["service", "topic"]:
+            print(f"{dtype} not in available options [service, topic]")
+            return False
+
+        interface_names = []
+        for name in interfaces:
             if not name.startswith("/schunk/driver"):
                 for gripper in self.list_grippers():
-                    service_names.append(f"/schunk/driver/{gripper}/{name}")
+                    interface_names.append(f"/schunk/driver/{gripper}/{name}")
             else:
-                service_names.append(name)
+                interface_names.append(name)
 
-        existing_services = getattr(self.node, "get_service_names_and_types_by_node")(
-            node_name="driver", node_namespace="/schunk"
-        )
-        advertised_services = [i[0] for i in existing_services]
-        advertised = [name in advertised_services for name in service_names]
+        if dtype == "service":
+            existing_interfaces = getattr(
+                self.node, f"get_{dtype}_names_and_types_by_node"
+            )(node_name="driver", node_namespace="/schunk")
+        else:
+            existing_interfaces = self.node.get_topic_names_and_types()
+
+        advertised_interfaces = [i[0] for i in existing_interfaces]
+        advertised = [name in advertised_interfaces for name in interface_names]
         if should_exist:
             for idx, exists in enumerate(advertised):
                 if not exists:
-                    print(f"service {service_names[idx]} not advertised")
+                    print(f"{dtype} {interface_names[idx]} not advertised")
             return all(advertised)
         else:
             for idx, exists in enumerate(advertised):
                 if exists:
-                    print(f"service {service_names[idx]} incorrectly advertised")
+                    print(f"{dtype} {interface_names[idx]} incorrectly advertised")
             return not any(advertised)
 
     def list_grippers(self) -> list[str]:

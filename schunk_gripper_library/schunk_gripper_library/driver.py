@@ -3,9 +3,9 @@ from threading import Lock
 from pymodbus.client import ModbusSerialClient
 from pymodbus.pdu import ModbusPDU
 import re
-from threading import Thread
+from threading import Thread, Event
 import time
-from httpx import Client, ConnectError, ConnectTimeout
+from httpx import Client, ConnectError, ConnectTimeout, ReadTimeout
 from importlib.resources import files
 from typing import Union
 import json
@@ -13,6 +13,7 @@ from .utility import Scheduler, supports_parity
 from functools import partial
 from pymodbus.logging import Log
 import serial  # type: ignore [import-untyped]
+from pymodbus.exceptions import ModbusIOException
 
 
 class NonExclusiveSerialClient(ModbusSerialClient):
@@ -119,6 +120,8 @@ class Driver(object):
         self.connected: bool = False
         self.polling_thread: Thread = Thread()
         self.update_cycle: float = 0.05  # sec
+        self.disconnect_request: Event = Event()
+        self.reconnect_interval: float = 1.0
 
     def connect(
         self,
@@ -167,6 +170,7 @@ class Driver(object):
                     baudrate=115200,
                     parity="E" if supports_parity(serial_port) else "N",
                     stopbits=1,
+                    timeout=0.05,
                     trace_connect=None,
                     trace_packet=None,
                     trace_pdu=None,
@@ -204,10 +208,10 @@ class Driver(object):
         return self.connected
 
     def disconnect(self) -> bool:
-        self.connected = False
         self.module = ""
         self.fieldbus = ""
         self.gripper = ""
+        self.disconnect_request.set()
         if self.polling_thread.is_alive():
             self.polling_thread.join()
 
@@ -219,6 +223,7 @@ class Driver(object):
             with self.web_client_lock:
                 self.web_client = None
 
+        self.connected = False
         self.update_module_parameters()
         return True
 
@@ -485,8 +490,10 @@ class Driver(object):
             data = self.read_module_parameter(self.plc_input)
             if data:
                 self.plc_input_buffer = data
-                return True
-        return False
+                self.connected = True
+            else:
+                self.connected = False
+            return self.connected
 
     def send_plc_output(self) -> bool:
         with self.output_buffer_lock:
@@ -549,24 +556,31 @@ class Driver(object):
 
         if self.mb_client and self.mb_client.connected:
             with self.mb_client_lock:
-                pdu = self.mb_client.read_holding_registers(
-                    address=int(param, 16) - 1,
-                    count=int(self.readable_parameters[param]["registers"]),
-                    slave=self.mb_device_id,
-                    no_response_expected=False,
-                )
+                try:
+                    pdu = self.mb_client.read_holding_registers(
+                        address=int(param, 16) - 1,
+                        count=int(self.readable_parameters[param]["registers"]),
+                        slave=self.mb_device_id,
+                        no_response_expected=False,
+                    )
+                except ModbusIOException:
+                    return result
+
             # Parse each 2-byte register,
             # reverting pymodbus' internal big endian decoding.
             if not pdu.isError():
                 for reg in pdu.registers:
                     result.extend(reg.to_bytes(2, byteorder="big"))
 
-        if self.web_client and self.connected:
+        if self.web_client:
             params = {"inst": param, "count": "1"}
             with self.web_client_lock:
-                response = self.web_client.get(
-                    f"http://{self.host}:{self.port}/adi/data.json", params=params
-                )
+                try:
+                    response = self.web_client.get(
+                        f"http://{self.host}:{self.port}/adi/data.json", params=params
+                    )
+                except (ReadTimeout, ConnectError, ConnectTimeout):
+                    return result
             if response.is_success:
                 result = bytearray(bytes.fromhex(response.json()[0]))
 
@@ -841,9 +855,20 @@ class Driver(object):
             return True
 
     def _module_update(self, update_cycle: float) -> None:
-        while self.connected:
-            self.receive_plc_input()
-            time.sleep(update_cycle)
+        self.disconnect_request.clear()
+        count = 0
+        while not self.disconnect_request.is_set():
+            if self.receive_plc_input():
+                self.connected = True
+                count = 0
+                time.sleep(update_cycle)
+            else:
+                self.connected = False
+                count += 1
+                if count < 3:
+                    time.sleep(update_cycle)
+                else:
+                    time.sleep(self.reconnect_interval)
 
     def _trace_packet(self, sending: bool, data: bytes) -> bytes:
         txt = "REQUEST stream" if sending else "RESPONSE stream"

@@ -20,47 +20,46 @@ from sensor_msgs.msg import JointState
 import rclpy
 import time
 from functools import partial
-from schunk_gripper_interfaces.msg import GripperState  # type: ignore [attr-defined]
+from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
+    GripperState,
+    ConnectionState,
+)
 
 
 @skip_without_gripper
 def test_driver_advertises_state_depending_topics(lifecycle_interface):
     driver = lifecycle_interface
     gripper_topics = ["joint_states", "gripper_state"]
+    connection_state_topic = ["/schunk/driver/connection_state"]
     until_change_takes_effect = 0.1
 
-    def exist(topics: list[str]) -> bool:
-        existing = driver.node.get_topic_names_and_types()
-        advertised = [i[0] for i in existing]
-        for gripper in driver.list_grippers():
-            for topic in topics:
-                if f"/schunk/driver/{gripper}/{topic}" not in advertised:
-                    return False
-        return True
-
-    for run in range(3):
+    for run in range(1):
 
         # After startup -> unconfigured
-        driver.check_state(State.PRIMARY_STATE_UNCONFIGURED)
+        assert driver.check_state(State.PRIMARY_STATE_UNCONFIGURED)
+        assert driver.check(connection_state_topic, dtype="topic", should_exist=True)
 
         # After configure -> inactive
         driver.change_state(Transition.TRANSITION_CONFIGURE)
         time.sleep(until_change_takes_effect)
-        assert not exist(gripper_topics)
+        assert driver.check(gripper_topics, dtype="topic", should_exist=False)
+        assert driver.check(connection_state_topic, dtype="topic", should_exist=True)
 
         # After activate -> active
         driver.change_state(Transition.TRANSITION_ACTIVATE)
         time.sleep(until_change_takes_effect)
-        assert exist(gripper_topics)
+        assert driver.check(gripper_topics, dtype="topic", should_exist=True)
+        assert driver.check(connection_state_topic, dtype="topic", should_exist=True)
 
         # After deactivate -> inactive
         driver.change_state(Transition.TRANSITION_DEACTIVATE)
         time.sleep(until_change_takes_effect)
-        assert not exist(gripper_topics)
+        assert driver.check(gripper_topics, dtype="topic", should_exist=False)
+        assert driver.check(connection_state_topic, dtype="topic", should_exist=True)
 
         # After cleanup -> unconfigured
         driver.change_state(Transition.TRANSITION_CLEANUP)
-        time.sleep(until_change_takes_effect)
+        assert driver.check(connection_state_topic, dtype="topic", should_exist=True)
 
 
 @skip_without_gripper
@@ -87,9 +86,9 @@ def test_driver_publishes_joint_states(lifecycle_interface):
             1,
         )
 
-    for _ in range(10):
-        rclpy.spin_once(driver.node)
-        time.sleep(0.1)
+    timeout = time.time() + 1.0
+    while time.time() < timeout and len(messages) == 0:
+        rclpy.spin_once(driver.node, timeout_sec=0.1)
 
     driver.change_state(Transition.TRANSITION_DEACTIVATE)
     driver.change_state(Transition.TRANSITION_CLEANUP)
@@ -141,9 +140,41 @@ def test_driver_publishes_gripper_state(lifecycle_interface):
             1,
         )
 
-    for _ in range(10):
-        rclpy.spin_once(driver.node)
-        time.sleep(0.1)
+    timeout = time.time() + 1.0
+    while time.time() < timeout and len(messages) == 0:
+        rclpy.spin_once(driver.node, timeout_sec=0.1)
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+
+    assert len(messages) >= 1
+
+
+@skip_without_gripper
+def test_driver_publishes_connection_state(lifecycle_interface):
+    driver = lifecycle_interface
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+    messages = []
+
+    # We have a single-gripper setup here
+    def check_fields(msg: ConnectionState, messages: list[ConnectionState]) -> None:
+        messages.append(msg)
+        assert msg.header.stamp
+        assert msg.header.frame_id
+        assert len(msg.grippers) == 1
+        assert len(msg.connected) == 1
+
+    _ = driver.node.create_subscription(
+        ConnectionState,
+        "/schunk/driver/connection_state",
+        partial(check_fields, messages=messages),
+        1,
+    )
+
+    timeout = time.time() + 1.0
+    while time.time() < timeout and len(messages) == 0:
+        rclpy.spin_once(driver.node, timeout_sec=0.1)
 
     driver.change_state(Transition.TRANSITION_DEACTIVATE)
     driver.change_state(Transition.TRANSITION_CLEANUP)

@@ -26,3 +26,16 @@ def test_update_route_is_available():
     assert response.is_success
 
     dummy.stop()
+
+
+def test_events_route_is_available():
+    dummy = Dummy()
+    dummy.start()
+    server = create_webserver(dummy)
+    client = TestClient(server)
+
+    events = {}
+    response = client.post("/adi/events.json", json=events)
+    assert response.is_success
+
+    dummy.stop()

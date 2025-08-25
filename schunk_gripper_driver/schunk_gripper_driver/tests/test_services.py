@@ -62,35 +62,35 @@ def test_driver_advertises_state_depending_services(lifecycle_interface):
 
         # After startup -> unconfigured
         driver.check_state(State.PRIMARY_STATE_UNCONFIGURED)
-        assert driver.check(config_services, should_exist=True)
-        assert driver.check(list_grippers, should_exist=False)
+        assert driver.check(config_services, dtype="service", should_exist=True)
+        assert driver.check(list_grippers, dtype="service", should_exist=False)
 
         # After configure -> inactive
         driver.change_state(Transition.TRANSITION_CONFIGURE)
         time.sleep(until_change_takes_effect)
-        assert driver.check(list_grippers, should_exist=True)
-        assert driver.check(config_services, should_exist=False)
-        assert driver.check(gripper_services, should_exist=False)
+        assert driver.check(list_grippers, dtype="service", should_exist=True)
+        assert driver.check(config_services, dtype="service", should_exist=False)
+        assert driver.check(gripper_services, dtype="service", should_exist=False)
 
         # After activate -> active
         driver.change_state(Transition.TRANSITION_ACTIVATE)
         time.sleep(until_change_takes_effect)
-        assert driver.check(list_grippers, should_exist=True)
-        assert driver.check(config_services, should_exist=False)
-        assert driver.check(gripper_services, should_exist=True)
+        assert driver.check(list_grippers, dtype="service", should_exist=True)
+        assert driver.check(config_services, dtype="service", should_exist=False)
+        assert driver.check(gripper_services, dtype="service", should_exist=True)
 
         # After deactivate -> inactive
         driver.change_state(Transition.TRANSITION_DEACTIVATE)
         time.sleep(until_change_takes_effect)
-        assert driver.check(list_grippers, should_exist=True)
-        assert driver.check(config_services, should_exist=False)
-        assert driver.check(gripper_services, should_exist=False)
+        assert driver.check(list_grippers, dtype="service", should_exist=True)
+        assert driver.check(config_services, dtype="service", should_exist=False)
+        assert driver.check(gripper_services, dtype="service", should_exist=False)
 
         # After cleanup -> unconfigured
         driver.change_state(Transition.TRANSITION_CLEANUP)
         time.sleep(until_change_takes_effect)
-        assert driver.check(config_services, should_exist=True)
-        assert driver.check(list_grippers, should_exist=False)
+        assert driver.check(config_services, dtype="service", should_exist=True)
+        assert driver.check(list_grippers, dtype="service", should_exist=False)
 
 
 @skip_without_gripper
