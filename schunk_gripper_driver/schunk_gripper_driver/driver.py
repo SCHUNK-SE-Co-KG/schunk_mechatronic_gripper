@@ -75,6 +75,7 @@ class Driver(Node):
             "serial_port": "/dev/ttyUSB0",
             "device_id": 12,
             "start_empty": False,
+            "headless": False,
         }
         for name, default_value in self.init_parameters.items():
             self.declare_parameter(name, default_value)
