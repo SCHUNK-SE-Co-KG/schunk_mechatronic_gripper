@@ -170,7 +170,7 @@ class Driver(object):
                     baudrate=115200,
                     parity="E" if supports_parity(serial_port) else "N",
                     stopbits=1,
-                    timeout=0.01,
+                    timeout=0.05,
                     trace_connect=None,
                     trace_packet=None,
                     trace_pdu=None,

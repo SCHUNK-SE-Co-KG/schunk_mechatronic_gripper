@@ -41,7 +41,7 @@ def test_driver_automatically_reestablishes_modbus_connection():
     # Modbus has several seconds default timeouts,
     # but we need to react fast to inform high-level callers about
     # the connection status
-    time.sleep(0.1)
+    time.sleep(0.5)
     assert not driver.connected
 
     time.sleep(downtime + driver.reconnect_interval)
