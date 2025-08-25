@@ -395,12 +395,9 @@ class Driver(object):
             desired_bits = {"4": 1, "12": 1}
             return self.wait_for_status(bits=desired_bits)
 
-        if position is not None:
-            duration_sec = self.estimate_duration(
-                position_abs=position, force=force, outward=outward
-            )
-        else:
-            duration_sec = self.estimate_duration(force=force, outward=outward)
+        duration_sec = self.estimate_duration(
+            position_abs=position, force=force, outward=outward
+        )
 
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
@@ -494,10 +491,12 @@ class Driver(object):
             still_to_go = position_abs - self.get_actual_position()
             if isinstance(velocity, int) and velocity > 0:
                 return abs(still_to_go) / velocity
-            elif self.module_parameters.get("max_grp_vel"):
+            if isinstance(force, int) and 0 < force <= 100:
+                grip_vel = (force / 100) * self.module_parameters["max_grp_vel"]
+                return abs(still_to_go) / grip_vel
+            if self.module_parameters.get("max_grp_vel"):
                 return abs(still_to_go) / self.module_parameters["max_grp_vel"]
-            else:
-                return 0.0
+            return 0.0
 
         if isinstance(force, int) and force > 0 and force <= 100:
             if outward:

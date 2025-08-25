@@ -658,3 +658,30 @@ def test_driver_offers_method_for_composing_gripper_type():
     for entry in valid_combinations:
         gripper_type = driver.compose_gripper_type(**entry["args"])
         assert gripper_type == entry["expected"]
+
+
+@skip_without_gripper
+def test_driver_estimates_duration_of_grip_at_position():
+    driver = Driver()
+
+    driver.connect(serial_port="/dev/ttyUSB0", device_id=12, update_cycle=None)
+    max_pos = driver.module_parameters["max_pos"]
+    min_pos = driver.module_parameters["min_pos"]
+    mid_pos = (min_pos + max_pos) // 2
+
+    def set_actual_position(position: int) -> None:
+        driver.plc_input_buffer[4:8] = bytes(struct.pack("i", position))
+
+    # Start near to mid_pos
+    set_actual_position(mid_pos - 1000)
+    forces = [50, 75, 100]
+
+    durations = []
+    for force in forces:
+        duration = driver.estimate_duration(position_abs=mid_pos, force=force)
+        durations.append(duration)
+
+    assert durations[0] > durations[1] > durations[2]
+
+    # Cleanup
+    driver.disconnect()

@@ -9,7 +9,7 @@ bool use_gpe  # Whether to activate grip force and position maintenance.
 bool outward  # Whether to open the gripper for grasping.
               # Defaults to False.
 
-int8 at_position  # Position to grip at
+int32 at_position  # Grip at a specific position
 ---
 bool success
 string message
