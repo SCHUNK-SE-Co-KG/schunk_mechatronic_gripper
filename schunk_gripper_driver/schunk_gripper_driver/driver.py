@@ -92,6 +92,11 @@ class Driver(Node):
             }
             self.grippers.append(gripper)
 
+        headless = self.get_parameter("headless").value
+        if headless:
+            self.reset_grippers()
+            self.load_previous_configuration()
+
         # Clean up initialization parameters
         for name in self.init_parameters.keys():
             self.undeclare_parameter(name)
