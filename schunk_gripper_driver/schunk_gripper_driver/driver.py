@@ -377,6 +377,7 @@ class Driver(Node):
             self.get_logger().debug(
                 f"Headless mode: {self.headless}. Auto activating.."
             )
+            self.headless = False
             Countdown(0.5, function=self.trigger_activate).start()
 
         return TransitionCallbackReturn.SUCCESS

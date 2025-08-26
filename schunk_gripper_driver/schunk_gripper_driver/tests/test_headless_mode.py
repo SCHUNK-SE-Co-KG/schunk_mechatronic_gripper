@@ -89,3 +89,18 @@ def test_driver_auto_configures_in_headless_mode(lifecycle_interface):
     # Note:
     # The default behavior (headless:=False) is implicitly covered
     # with all other tests outside this module.
+
+
+@skip_without_gripper
+def test_driver_auto_configures_only_once(lifecycle_interface):
+    driver = lifecycle_interface
+    assert driver.check_state(State.PRIMARY_STATE_UNCONFIGURED)
+
+    # No automatic transition to `active` when `on_configure` is called again
+    until_takes_effect = 1.0
+    for _ in range(3):
+        driver.change_state(Transition.TRANSITION_CONFIGURE)
+        time.sleep(until_takes_effect)
+        assert driver.check_state(State.PRIMARY_STATE_INACTIVE)
+        driver.change_state(Transition.TRANSITION_CLEANUP)
+        assert driver.check_state(State.PRIMARY_STATE_UNCONFIGURED)
