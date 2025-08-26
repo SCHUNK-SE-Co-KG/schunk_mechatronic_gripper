@@ -46,3 +46,14 @@ def test_driver_uses_previous_configuration_in_headless_mode(ros2):
         driver = Driver("driver")
         for idx, gripper in enumerate(config):
             assert set(gripper).issubset(set(driver.grippers[idx]))
+
+    # Check that invalid configurations leave the driver empty
+    invalid_config = [
+        {"somebody screwed": "1.2.3.4", "port": 1234, "this up": True},
+    ]
+    with open(location.joinpath("configuration.json"), "w") as f:
+        json.dump(invalid_config, f)
+
+    with patch.object(Driver, "get_parameter", new=get_parameter):
+        driver = Driver("driver")
+        assert len(driver.grippers) == 0
