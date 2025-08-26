@@ -14,9 +14,15 @@
 # this program. If not, see <https://www.gnu.org/licenses/>.
 # --------------------------------------------------------------------------------
 from schunk_gripper_driver.driver import Driver
+from schunk_gripper_library.utility import skip_without_gripper
+from lifecycle_msgs.msg import State, Transition
 from pathlib import Path
 import json
 from unittest.mock import patch, MagicMock
+import time
+
+# Module-wide settings
+headless = True
 
 
 def test_driver_uses_previous_configuration_in_headless_mode(ros2):
@@ -57,3 +63,29 @@ def test_driver_uses_previous_configuration_in_headless_mode(ros2):
     with patch.object(Driver, "get_parameter", new=get_parameter):
         driver = Driver("driver")
         assert len(driver.grippers) == 0
+
+    # Store a valid configuration for the next test
+    config = [
+        {"host": "0.0.0.0", "port": 8000},
+        {"serial_port": "/dev/ttyUSB0", "device_id": 12},
+    ]
+    with open(location.joinpath("configuration.json"), "w") as f:
+        json.dump(config, f)
+
+
+@skip_without_gripper
+def test_driver_auto_configures_in_headless_mode(lifecycle_interface):
+    driver = lifecycle_interface
+
+    # Give it some time to auto-transition
+    time.sleep(1.0)
+
+    assert driver.check_state(State.PRIMARY_STATE_ACTIVE)
+
+    # Clean-up for next test
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+
+    # Note:
+    # The default behavior (headless:=False) is implicitly covered
+    # with all other tests outside this module.

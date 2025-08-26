@@ -92,8 +92,8 @@ class Driver(Node):
             }
             self.grippers.append(gripper)
 
-        headless = self.get_parameter("headless").value
-        if headless:
+        self.headless = self.get_parameter("headless").value
+        if self.headless:
             self.reset_grippers()
             self.load_previous_configuration()
 
@@ -169,6 +169,12 @@ class Driver(Node):
             target=self._publish_connection_state
         )
         self.connection_status_thread.start()
+
+        if self.headless:
+            self.get_logger().debug(
+                f"Headless mode: {self.headless}. Auto configuring.."
+            )
+            Countdown(0.5, function=self.trigger_configure).start()
 
     def list_grippers(self) -> list[str]:
         devices = []
@@ -366,6 +372,12 @@ class Driver(Node):
         self.destroy_service(self.show_configuration_srv)
         self.destroy_service(self.save_configuration_srv)
         self.destroy_service(self.load_previous_configuration_srv)
+
+        if self.headless:
+            self.get_logger().debug(
+                f"Headless mode: {self.headless}. Auto activating.."
+            )
+            Countdown(0.5, function=self.trigger_activate).start()
 
         return TransitionCallbackReturn.SUCCESS
 
