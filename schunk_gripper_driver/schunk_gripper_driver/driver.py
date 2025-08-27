@@ -29,6 +29,10 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     GripGPE,
     GripAtPosition,
     GripAtPositionGPE,
+    SoftGrip,
+    SoftGripGPE,
+    SoftGripAtPosition,
+    SoftGripAtPositionGPE,
     Release,
     StartJogging,
     StartJoggingGPE,
@@ -457,6 +461,32 @@ class Driver(Node):
                 )
             )
 
+            if gripper["driver"].gpe_available():
+                ServiceType = SoftGripGPE
+            else:
+                ServiceType = SoftGrip
+            self.gripper_services.append(
+                self.create_service(
+                    ServiceType,
+                    f"~/{gripper_id}/soft_grip",
+                    partial(self._grip_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+
+            if gripper["driver"].gpe_available():
+                ServiceType = SoftGripAtPositionGPE
+            else:
+                ServiceType = SoftGripAtPosition
+            self.gripper_services.append(
+                self.create_service(
+                    ServiceType,
+                    f"~/{gripper_id}/soft_grip_at_position",
+                    partial(self._grip_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+
             self.gripper_services.append(
                 self.create_service(
                     Release,
@@ -880,10 +910,12 @@ class Driver(Node):
 
         use_gpe = getattr(request, "use_gpe", False)
         at_position = getattr(request, "at_position", None)
+        velocity = getattr(request, "velocity", None)
 
         if self.needs_synchronize(gripper):
             response.success = gripper["driver"].grip(
                 position=at_position,
+                velocity=velocity,
                 force=request.force,
                 use_gpe=use_gpe,
                 outward=request.outward,
@@ -892,6 +924,7 @@ class Driver(Node):
         else:
             response.success = gripper["driver"].grip(
                 position=at_position,
+                velocity=velocity,
                 force=request.force,
                 use_gpe=use_gpe,
                 outward=request.outward,

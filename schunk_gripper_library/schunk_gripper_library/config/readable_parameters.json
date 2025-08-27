@@ -10,5 +10,6 @@
     "0x0588": {"name": "max_phys_stroke", "registers": 2, "type": "float"},
     "0x0660": {"name": "max_grp_force", "registers": 2, "type": "float"},
     "0x1000": {"name": "serial_no_txt", "registers": 8, "type": "char[16]"},
-    "0x1118": {"name": "sw_version_txt", "registers": 11, "type": "char[22]"}
+    "0x1118": {"name": "sw_version_txt", "registers": 11, "type": "char[22]"},
+    "0x0628": {"name": "min_vel", "registers": 2, "type": "float"}
 }

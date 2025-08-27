@@ -68,6 +68,7 @@ class Driver(object):
             "wp_release_delta": None,
             "max_phys_stroke": None,
             "max_grp_force": None,
+            "min_vel": None,
         }
         # fmt: off
         self.valid_status_bits: list[int] = (
@@ -312,7 +313,7 @@ class Driver(object):
 
         def check():
             desired_bits = {"13": 1, "4": 1}
-            return self.wait_for_status(bits=desired_bits)
+            return self.wait_for_status(bits=desired_bits, timeout_sec=10)
 
         duration_sec = self.estimate_duration(position_abs=position, velocity=velocity)
         if scheduler:
@@ -352,6 +353,7 @@ class Driver(object):
         self,
         force: int,
         position: int | None = None,
+        velocity: int | None = None,
         use_gpe: bool = False,
         outward: bool = False,
         scheduler: Scheduler | None = None,
@@ -362,6 +364,11 @@ class Driver(object):
             return False
         if position is not None and not isinstance(position, int):
             return False
+        if velocity is not None:
+            min_vel = self.module_parameters["min_vel"]
+            max_vel = (force / 100) * self.module_parameters["max_grp_vel"]
+            if not (min_vel <= velocity <= max_vel):
+                return False
 
         if position is not None:
             trigger_bit = 16
@@ -382,7 +389,10 @@ class Driver(object):
             self.set_gripping_force(force)
             if position is not None:
                 self.set_target_position(position)
-            self.set_target_speed(0)
+            if velocity is not None:
+                self.set_target_speed(velocity)
+            else:
+                self.set_target_speed(0)
             self.send_plc_output()
             desired_bits = {"5": cmd_toggle_before ^ 1, "3": 0}
             return self.wait_for_status(bits=desired_bits, timeout_sec=0.1)
@@ -396,7 +406,7 @@ class Driver(object):
             return self.wait_for_status(bits=desired_bits)
 
         duration_sec = self.estimate_duration(
-            position_abs=position, force=force, outward=outward
+            position_abs=position, velocity=velocity, force=force, outward=outward
         )
 
         if scheduler:
@@ -477,7 +487,7 @@ class Driver(object):
         self,
         release: bool = False,
         position_abs: int | None = None,
-        velocity: int = 0,
+        velocity: int | None = None,
         force: int = 0,
         outward: bool = False,
     ) -> float:
@@ -486,7 +496,7 @@ class Driver(object):
                 self.module_parameters["wp_release_delta"]
                 / self.module_parameters["max_vel"]
             )
-
+        # With Position
         if isinstance(position_abs, int):
             still_to_go = position_abs - self.get_actual_position()
             if isinstance(velocity, int) and velocity > 0:
@@ -498,6 +508,7 @@ class Driver(object):
                 return abs(still_to_go) / self.module_parameters["max_grp_vel"]
             return 0.0
 
+        # Without Position
         if isinstance(force, int) and force > 0 and force <= 100:
             if outward:
                 still_to_go = (
@@ -507,6 +518,8 @@ class Driver(object):
                 still_to_go = (
                     self.module_parameters["min_pos"] - self.get_actual_position()
                 )
+            if isinstance(velocity, int) and velocity > 0:
+                return abs(still_to_go) / velocity
             ratio = force / 100
             return abs(still_to_go) / (ratio * self.module_parameters["max_grp_vel"])
         return 0.0

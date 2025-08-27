@@ -1,0 +1,13 @@
+int8 force    # Percentage points of the gripper's max. gripping force.
+              # Tolerated values in [50, 100]
+
+bool outward  # Whether to open the gripper for grasping.
+              # Defaults to False.
+
+int16 velocity # Optional speed for the gripping motion (e.g., SoftGrip modes).
+              # Defaults to 0.
+
+int32 at_position  # Optional target position for the gripper [mm].
+---
+bool success
+string message
