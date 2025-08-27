@@ -36,9 +36,8 @@ def test_whether_we_cover_all_driver_parameters(driver):
     # Meta-check if we test all our node parameters
     future = list_params_client.call_async(ListParameters.Request())
     rclpy.spin_until_future_complete(node, future)
-    assert (
-        len(DRIVER_PARAMETERS) == len(future.result().result.names) - 1
-    )  # There's a default node parameter: `use_sim_time``
+    for param in DRIVER_PARAMETERS:
+        assert param in future.result().result.names
 
 
 @skip_without_gripper

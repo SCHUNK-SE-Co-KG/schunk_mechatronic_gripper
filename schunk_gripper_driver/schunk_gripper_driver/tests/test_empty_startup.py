@@ -14,12 +14,27 @@
 # this program. If not, see <https://www.gnu.org/licenses/>.
 # --------------------------------------------------------------------------------
 from rclpy.node import Node
-from lifecycle_msgs.srv import GetState
+import rclpy
+from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
+    ShowConfiguration,
+)
+
+# Module-wide settings
+start_empty = True
 
 
-def test_normal_startup_works(driver):
-    node = Node("test_startup")
-    client = node.create_client(GetState, "/schunk/driver/get_state")
+def test_driver_can_start_without_initial_gripper(driver):
+    node = Node("test_without_initial_gripper")
 
-    # The driver started correctly if the lifecycle interface is reachable
-    assert client.wait_for_service(timeout_sec=2)
+    client = node.create_client(ShowConfiguration, "/schunk/driver/show_configuration")
+
+    assert client.wait_for_service(timeout_sec=2.0)
+
+    request = ShowConfiguration.Request()
+    future = client.call_async(request)
+
+    rclpy.spin_until_future_complete(node, future, timeout_sec=2.0)
+    response = future.result()
+    assert response.configuration == []
+
+    node.destroy_node()
