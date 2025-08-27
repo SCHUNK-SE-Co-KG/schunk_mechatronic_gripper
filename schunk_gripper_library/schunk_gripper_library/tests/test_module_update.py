@@ -19,13 +19,15 @@ def test_driver_runs_receiving_background_thread():
 
 
 @skip_without_gripper
-def test_driver_updates_with_specified_cycle():
+def test_driver_stores_specified_update_cycle():
     driver = Driver()
+
+    # Store for successful connects
     for host, port, serial_port in zip(
         ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
     ):
         update_cycle = 0.1
-        driver.connect(
+        assert driver.connect(
             host=host,
             port=port,
             serial_port=serial_port,
@@ -34,6 +36,10 @@ def test_driver_updates_with_specified_cycle():
         )
         assert pytest.approx(driver.update_cycle) == update_cycle
         driver.disconnect()
+
+    # Don't store when connect fails
+    assert not driver.connect(update_cycle=42.123)
+    assert pytest.approx(driver.update_cycle) == update_cycle  # from last connect
 
 
 @skip_without_gripper
