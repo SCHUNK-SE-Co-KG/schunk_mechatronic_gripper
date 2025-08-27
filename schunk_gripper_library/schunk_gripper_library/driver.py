@@ -120,6 +120,7 @@ class Driver(object):
         self.connected: bool = False
         self.polling_thread: Thread = Thread()
         self.update_cycle: float = 0.05  # sec
+        self.update_count: int = 0  # since last connect() call
         self.disconnect_request: Event = Event()
         self.reconnect_interval: float = 1.0
 
@@ -137,6 +138,7 @@ class Driver(object):
             return False
         if self.connected:
             return False
+        self.update_count = 0
 
         # TCP/IP
         if host:
@@ -856,16 +858,17 @@ class Driver(object):
 
     def _module_update(self, update_cycle: float) -> None:
         self.disconnect_request.clear()
-        count = 0
+        fails = 0
         while not self.disconnect_request.is_set():
             if self.receive_plc_input():
                 self.connected = True
-                count = 0
+                self.update_count += 1
+                fails = 0
                 time.sleep(update_cycle)
             else:
                 self.connected = False
-                count += 1
-                if count < 3:
+                fails += 1
+                if fails < 3:
                     time.sleep(update_cycle)
                 else:
                     time.sleep(self.reconnect_interval)

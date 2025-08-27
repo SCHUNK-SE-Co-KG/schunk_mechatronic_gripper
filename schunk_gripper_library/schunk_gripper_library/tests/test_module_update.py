@@ -60,3 +60,29 @@ def test_driver_skips_background_thread_without_update_cycle():
             assert not driver.polling_thread.is_alive()
             assert pytest.approx(driver.update_cycle) == as_before
             driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_counts_module_updates():
+    driver = Driver()
+    assert driver.update_count == 0
+
+    # Starts counting after successful connect
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        driver.connect(
+            host=host,
+            port=port,
+            serial_port=serial_port,
+            device_id=12,
+            update_cycle=0.1,
+        )
+        driver.disconnect()
+
+    time.sleep(1.0)
+    assert driver.update_count > 0
+
+    # Resets counter after new connect calls
+    assert not driver.connect()
+    assert driver.update_count == 0
