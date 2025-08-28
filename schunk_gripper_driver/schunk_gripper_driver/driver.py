@@ -567,7 +567,7 @@ class Driver(Node):
     def _publish_joint_states(self) -> None:
         next_time = time.perf_counter()
 
-        while not self.joint_states_stop.is_set():
+        while rclpy.ok() and not self.joint_states_stop.is_set():
             now = time.perf_counter()
 
             if now >= next_time:
@@ -581,7 +581,12 @@ class Driver(Node):
 
                     with self.joint_state_lock:
                         if gripper_id in self.joint_state_publishers:
-                            self.joint_state_publishers[gripper_id].publish(msg)
+                            try:
+                                self.joint_state_publishers[gripper_id].publish(msg)
+
+                            # Catch InvalidHandle exceptions on SIGINT (ctrl-c)
+                            except RuntimeError:
+                                break
 
                 next_time += self.joint_states_period
             else:
@@ -590,7 +595,7 @@ class Driver(Node):
     def _publish_gripper_states(self) -> None:
         next_time = time.perf_counter()
 
-        while not self.joint_states_stop.is_set():
+        while rclpy.ok() and not self.joint_states_stop.is_set():
             now = time.perf_counter()
 
             if now >= next_time:
@@ -655,7 +660,12 @@ class Driver(Node):
 
                     with self.gripper_state_lock:
                         if gripper_id in self.gripper_state_publishers:
-                            self.gripper_state_publishers[gripper_id].publish(msg)
+                            try:
+                                self.gripper_state_publishers[gripper_id].publish(msg)
+
+                            # Catch InvalidHandle exceptions on SIGINT (ctrl-c)
+                            except RuntimeError:
+                                break
 
                 next_time += self.joint_states_period
             else:
