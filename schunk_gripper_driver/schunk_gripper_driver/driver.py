@@ -39,7 +39,6 @@ from std_srvs.srv import Trigger
 from threading import Lock, Thread, Event, Timer as Countdown
 from rclpy.service import Service
 from rclpy.publisher import Publisher
-from rclpy.timer import Timer
 from rclpy.executors import MultiThreadedExecutor, ExternalShutdownException
 from functools import partial
 from schunk_gripper_library.utility import Scheduler
@@ -132,9 +131,6 @@ class Driver(Node):
         self.add_on_set_parameters_callback(self._param_cb)
 
         # For concurrently running publishers
-        self.timers_cb_group: MutuallyExclusiveCallbackGroup = (
-            MutuallyExclusiveCallbackGroup()
-        )
         self.publishers_cb_group: MutuallyExclusiveCallbackGroup = (
             MutuallyExclusiveCallbackGroup()
         )
@@ -144,17 +140,15 @@ class Driver(Node):
             ReentrantCallbackGroup()
         )
 
-        # Timers
-        self.joint_states_timer: Timer = self.create_timer(
-            timer_period_sec=0.05,
-            callback=partial(self._publish_joint_states),
-            callback_group=self.timers_cb_group,
-        )
-        self.gripper_states_timer: Timer = self.create_timer(
-            timer_period_sec=0.05,
-            callback=partial(self._publish_gripper_states),
-            callback_group=self.timers_cb_group,
-        )
+        # Joint states
+        self.joint_states_stop: Event = Event()
+        self.joint_states_period: float = 0.05  # sec
+        self.joint_states_thread: Thread = Thread()
+
+        # Gripper states
+        self.gripper_states_stop: Event = Event()
+        self.gripper_states_period: float = 0.05  # sec
+        self.gripper_states_thread: Thread = Thread()
 
         # Connection state
         self.connection_state_publisher: Publisher = self.create_publisher(
@@ -472,10 +466,23 @@ class Driver(Node):
                 callback_group=self.publishers_cb_group,
             )
 
+        self.joint_states_stop.clear()
+        self.joint_states_thread = Thread(target=self._publish_joint_states)
+        self.joint_states_thread.start()
+        self.gripper_states_stop.clear()
+        self.gripper_states_thread = Thread(target=self._publish_gripper_states)
+        self.gripper_states_thread.start()
+
         return super().on_activate(state)
 
     def on_deactivate(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().debug("on_deactivate() is called.")
+
+        # Stop publishing
+        self.joint_states_stop.set()
+        self.joint_states_thread.join()
+        self.gripper_states_stop.set()
+        self.gripper_states_thread.join()
 
         # Release gripper-specific services
         for idx, _ in enumerate(self.gripper_services):
@@ -525,8 +532,6 @@ class Driver(Node):
 
     def on_shutdown(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().debug("on_shutdown() is called.")
-        self.joint_states_timer.cancel()
-        self.gripper_states_timer.cancel()
         self.connection_status_stop.set()
         self.connection_status_thread.join()
 
@@ -560,71 +565,101 @@ class Driver(Node):
         return SetParametersResult(successful=True)
 
     def _publish_joint_states(self) -> None:
+        next_time = time.perf_counter()
 
-        for gripper in self.grippers:
-            msg = JointState()
-            gripper_id = gripper["gripper_id"]
-            msg.header.frame_id = gripper_id
-            msg.header.stamp = self.get_clock().now().to_msg()
-            msg.name.append(gripper_id)
-            msg.position.append(gripper["driver"].get_actual_position() / 1e6)
+        while not self.joint_states_stop.is_set():
+            now = time.perf_counter()
 
-            with self.joint_state_lock:
-                if gripper_id in self.joint_state_publishers:
-                    self.joint_state_publishers[gripper_id].publish(msg)
+            if now >= next_time:
+                for gripper in self.grippers:
+                    msg = JointState()
+                    gripper_id = gripper["gripper_id"]
+                    msg.header.frame_id = gripper_id
+                    msg.header.stamp = self.get_clock().now().to_msg()
+                    msg.name.append(gripper_id)
+                    msg.position.append(gripper["driver"].get_actual_position() / 1e6)
+
+                    with self.joint_state_lock:
+                        if gripper_id in self.joint_state_publishers:
+                            self.joint_state_publishers[gripper_id].publish(msg)
+
+                next_time += self.joint_states_period
+            else:
+                time.sleep(max(0, next_time - now))
 
     def _publish_gripper_states(self) -> None:
+        next_time = time.perf_counter()
 
-        for gripper in self.grippers:
-            msg = GripperState()
-            gripper_id = gripper["gripper_id"]
-            msg.header.frame_id = gripper_id
-            msg.header.stamp = self.get_clock().now().to_msg()
+        while not self.joint_states_stop.is_set():
+            now = time.perf_counter()
 
-            status = gripper["driver"].get_status_diagnostics().split(",")
-            msg.error_code = status[0].strip()
-            msg.warning_code = status[1].strip()
-            msg.additional_code = status[2].strip()
+            if now >= next_time:
+                for gripper in self.grippers:
+                    msg = GripperState()
+                    gripper_id = gripper["gripper_id"]
+                    msg.header.frame_id = gripper_id
+                    msg.header.stamp = self.get_clock().now().to_msg()
 
-            msg.bit0_ready_for_operation = bool(gripper["driver"].get_status_bit(bit=0))
-            msg.bit1_control_authority_fieldbus = bool(
-                gripper["driver"].get_status_bit(bit=1)
-            )
-            msg.bit2_ready_for_shutdown = bool(gripper["driver"].get_status_bit(bit=2))
-            msg.bit3_not_feasible = bool(gripper["driver"].get_status_bit(bit=3))
-            msg.bit4_command_successfully_processed = bool(
-                gripper["driver"].get_status_bit(bit=4)
-            )
-            msg.bit5_command_received_toggle = bool(
-                gripper["driver"].get_status_bit(bit=5)
-            )
-            msg.bit6_warning = bool(gripper["driver"].get_status_bit(bit=6))
-            msg.bit7_error = bool(gripper["driver"].get_status_bit(bit=7))
-            msg.bit8_released_for_manual_movement = bool(
-                gripper["driver"].get_status_bit(bit=8)
-            )
-            msg.bit9_software_limit_reached = bool(
-                gripper["driver"].get_status_bit(bit=9)
-            )
-            msg.bit11_no_workpiece_detected = bool(
-                gripper["driver"].get_status_bit(bit=11)
-            )
-            msg.bit12_workpiece_gripped = bool(gripper["driver"].get_status_bit(bit=12))
-            msg.bit13_position_reached = bool(gripper["driver"].get_status_bit(bit=13))
-            msg.bit14_workpiece_pre_grip_started = bool(
-                gripper["driver"].get_status_bit(bit=14)
-            )
-            msg.bit16_workpiece_lost = bool(gripper["driver"].get_status_bit(bit=16))
-            msg.bit17_wrong_workpiece_gripped = bool(
-                gripper["driver"].get_status_bit(bit=17)
-            )
-            msg.bit31_grip_force_and_position_maintenance_activated = bool(
-                gripper["driver"].get_status_bit(bit=31)
-            )
+                    status = gripper["driver"].get_status_diagnostics().split(",")
+                    msg.error_code = status[0].strip()
+                    msg.warning_code = status[1].strip()
+                    msg.additional_code = status[2].strip()
 
-            with self.gripper_state_lock:
-                if gripper_id in self.gripper_state_publishers:
-                    self.gripper_state_publishers[gripper_id].publish(msg)
+                    msg.bit0_ready_for_operation = bool(
+                        gripper["driver"].get_status_bit(bit=0)
+                    )
+                    msg.bit1_control_authority_fieldbus = bool(
+                        gripper["driver"].get_status_bit(bit=1)
+                    )
+                    msg.bit2_ready_for_shutdown = bool(
+                        gripper["driver"].get_status_bit(bit=2)
+                    )
+                    msg.bit3_not_feasible = bool(
+                        gripper["driver"].get_status_bit(bit=3)
+                    )
+                    msg.bit4_command_successfully_processed = bool(
+                        gripper["driver"].get_status_bit(bit=4)
+                    )
+                    msg.bit5_command_received_toggle = bool(
+                        gripper["driver"].get_status_bit(bit=5)
+                    )
+                    msg.bit6_warning = bool(gripper["driver"].get_status_bit(bit=6))
+                    msg.bit7_error = bool(gripper["driver"].get_status_bit(bit=7))
+                    msg.bit8_released_for_manual_movement = bool(
+                        gripper["driver"].get_status_bit(bit=8)
+                    )
+                    msg.bit9_software_limit_reached = bool(
+                        gripper["driver"].get_status_bit(bit=9)
+                    )
+                    msg.bit11_no_workpiece_detected = bool(
+                        gripper["driver"].get_status_bit(bit=11)
+                    )
+                    msg.bit12_workpiece_gripped = bool(
+                        gripper["driver"].get_status_bit(bit=12)
+                    )
+                    msg.bit13_position_reached = bool(
+                        gripper["driver"].get_status_bit(bit=13)
+                    )
+                    msg.bit14_workpiece_pre_grip_started = bool(
+                        gripper["driver"].get_status_bit(bit=14)
+                    )
+                    msg.bit16_workpiece_lost = bool(
+                        gripper["driver"].get_status_bit(bit=16)
+                    )
+                    msg.bit17_wrong_workpiece_gripped = bool(
+                        gripper["driver"].get_status_bit(bit=17)
+                    )
+                    msg.bit31_grip_force_and_position_maintenance_activated = bool(
+                        gripper["driver"].get_status_bit(bit=31)
+                    )
+
+                    with self.gripper_state_lock:
+                        if gripper_id in self.gripper_state_publishers:
+                            self.gripper_state_publishers[gripper_id].publish(msg)
+
+                next_time += self.joint_states_period
+            else:
+                time.sleep(max(0, next_time - now))
 
     def _publish_connection_state(self) -> None:
         msg = ConnectionState()
