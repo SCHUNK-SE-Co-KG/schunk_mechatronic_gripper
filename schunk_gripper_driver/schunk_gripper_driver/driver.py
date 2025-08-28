@@ -33,6 +33,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     SoftGripGPE,
     SoftGripAtPosition,
     SoftGripAtPositionGPE,
+    StrongGripGPE,
     Release,
     StartJogging,
     StartJoggingGPE,
@@ -461,31 +462,46 @@ class Driver(Node):
                 )
             )
 
-            if gripper["driver"].gpe_available():
-                ServiceType = SoftGripGPE
-            else:
-                ServiceType = SoftGrip
-            self.gripper_services.append(
-                self.create_service(
-                    ServiceType,
-                    f"~/{gripper_id}/soft_grip",
-                    partial(self._grip_cb, gripper=gripper),
-                    callback_group=self.gripper_services_cb_group,
+            if gripper["driver"].get_variant() == "EGK":
+                if gripper["driver"].gpe_available():
+                    ServiceType = SoftGripGPE
+                else:
+                    ServiceType = SoftGrip
+                self.gripper_services.append(
+                    self.create_service(
+                        ServiceType,
+                        f"~/{gripper_id}/soft_grip",
+                        partial(self._grip_cb, gripper=gripper),
+                        callback_group=self.gripper_services_cb_group,
+                    )
                 )
-            )
 
-            if gripper["driver"].gpe_available():
-                ServiceType = SoftGripAtPositionGPE
-            else:
-                ServiceType = SoftGripAtPosition
-            self.gripper_services.append(
-                self.create_service(
-                    ServiceType,
-                    f"~/{gripper_id}/soft_grip_at_position",
-                    partial(self._grip_cb, gripper=gripper),
-                    callback_group=self.gripper_services_cb_group,
+                if gripper["driver"].gpe_available():
+                    ServiceType = SoftGripAtPositionGPE
+                else:
+                    ServiceType = SoftGripAtPosition
+                self.gripper_services.append(
+                    self.create_service(
+                        ServiceType,
+                        f"~/{gripper_id}/soft_grip_at_position",
+                        partial(self._grip_cb, gripper=gripper),
+                        callback_group=self.gripper_services_cb_group,
+                    )
                 )
-            )
+
+            if (
+                gripper["driver"].get_variant() in ["EGU", "EZU"]
+                and gripper["driver"].gpe_available()
+            ):
+                ServiceType = StrongGripGPE
+                self.gripper_services.append(
+                    self.create_service(
+                        ServiceType,
+                        f"~/{gripper_id}/strong_grip",
+                        partial(self._grip_cb, gripper=gripper),
+                        callback_group=self.gripper_services_cb_group,
+                    )
+                )
 
             self.gripper_services.append(
                 self.create_service(

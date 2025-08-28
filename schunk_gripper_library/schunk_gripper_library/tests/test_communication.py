@@ -745,3 +745,78 @@ def test_driver_estimates_duration_of_soft_grip_at_position():
 
     # Cleanup
     driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_estimates_duration_of_strong_grip():
+    driver = Driver()
+
+    driver.connect(serial_port="/dev/ttyUSB0", device_id=12, update_cycle=None)
+    max_pos = driver.module_parameters["max_pos"]
+    min_pos = driver.module_parameters["min_pos"]
+    mid_pos = (min_pos + max_pos) // 2
+
+    def set_actual_position(position: int) -> None:
+        driver.plc_input_buffer[4:8] = bytes(struct.pack("i", position))
+
+    # Start at mid_pos
+    set_actual_position(mid_pos)
+    forces = [130, 175, 200]
+
+    durations = []
+    for force in forces:
+        duration = driver.estimate_duration(force=force)
+        durations.append(duration)
+
+    assert durations[0] > durations[1] > durations[2]
+
+    # Cleanup
+    driver.disconnect()
+
+
+def test_driver_can_detect_variant():
+    driver = Driver()
+    assert driver.get_variant() == ""  # when unconnected
+
+    egk_types = [
+        "EGK_25_M_B",
+        "EGK_25_N_B",
+        "EGK_40_M_B",
+        "EGK_40_N_B",
+        "EGK_50_M_B",
+        "EGK_50_N_B",
+    ]
+    egu_types = [
+        "EGU_50_M_B",
+        "EGU_60_M_SD",
+        "EGU_70_N_B",
+        "EGU_80_N_B",
+    ]
+    ezu_types = [
+        "EZU_30_M_B",
+        "EZU_30_M_SD",
+        "EZU_40_N_SD",
+    ]
+    unknown_types = [
+        "XYZ_99_PN_M",
+        "UG4_DIO_80",
+        "0x0048",
+        "???",
+        "_EGU_40_M_B",
+    ]
+
+    for type_str in egk_types:
+        driver.module = type_str
+        assert driver.get_variant() == "EGK"
+
+    for type_str in egu_types:
+        driver.module = type_str
+        assert driver.get_variant() == "EGU"
+
+    for type_str in ezu_types:
+        driver.module = type_str
+        assert driver.get_variant() == "EZU"
+
+    for type_str in unknown_types:
+        driver.module = type_str
+        assert driver.get_variant() == ""

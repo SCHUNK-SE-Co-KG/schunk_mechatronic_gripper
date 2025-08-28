@@ -313,7 +313,7 @@ class Driver(object):
 
         def check():
             desired_bits = {"13": 1, "4": 1}
-            return self.wait_for_status(bits=desired_bits, timeout_sec=10)
+            return self.wait_for_status(bits=desired_bits)
 
         duration_sec = self.estimate_duration(position_abs=position, velocity=velocity)
         if scheduler:
@@ -509,7 +509,7 @@ class Driver(object):
             return 0.0
 
         # Without Position
-        if isinstance(force, int) and force > 0 and force <= 100:
+        if isinstance(force, int) and 0 < force <= 200:
             if outward:
                 still_to_go = (
                     self.module_parameters["max_pos"] - self.get_actual_position()
@@ -910,7 +910,7 @@ class Driver(object):
                 return False
             if gripping_force <= 0:
                 return False
-            if gripping_force > 100:
+            if gripping_force > 100 and self.get_variant() not in ["EGU", "EZU"]:
                 return False
             data = bytes(struct.pack("i", gripping_force))
             if self.fieldbus == "PN":
@@ -977,3 +977,14 @@ class Driver(object):
     def _trace_connect(self, connect: bool) -> None:
         txt = "Connected" if connect else "Disconnected"
         print(f"---> {txt}")
+
+    def get_variant(self) -> str:
+        if not self.module:
+            return ""
+        if self.module.startswith("EGU"):
+            return "EGU"
+        elif self.module.startswith("EGK"):
+            return "EGK"
+        elif self.module.startswith("EZU"):
+            return "EZU"
+        return ""
