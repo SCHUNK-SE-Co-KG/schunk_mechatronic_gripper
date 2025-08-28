@@ -137,3 +137,5 @@ def test_driver_handles_pymodbus_exceptions_during_polling(simulate_pymodbus_fai
     simulate_pymodbus_failure["exception"] = None
     time.sleep(driver.reconnect_interval)
     assert driver.connected
+
+    driver.disconnect()

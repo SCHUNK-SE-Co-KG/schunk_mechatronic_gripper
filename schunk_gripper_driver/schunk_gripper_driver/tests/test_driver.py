@@ -129,26 +129,38 @@ def test_driver_manages_publishers_for_each_gripper(ros2: None):
 
 
 @skip_without_gripper
-def test_driver_manages_two_timers_for_all_grippers(ros2: None):
+def test_driver_manages_two_threads_for_all_grippers(ros2: None):
     driver = Driver("driver")
 
-    assert driver.joint_states_timer is not None
-    assert driver.gripper_states_timer is not None
+    def both_threads_alive() -> bool:
+        return (
+            driver.joint_states_thread.is_alive()
+            and driver.gripper_states_thread.is_alive()
+        )
 
-    # Check that we re-use the same timers during lifetime
-    initial_joints_timer = driver.joint_states_timer
-    initial_states_timer = driver.gripper_states_timer
-    for _ in range(3):
+    def no_thread_alive() -> bool:
+        return (
+            not driver.joint_states_thread.is_alive()
+            and not driver.gripper_states_thread.is_alive()
+        )
+
+    for run in range(3):
+        assert no_thread_alive()
+
         driver.on_configure(state=None)
+        assert no_thread_alive()
+
         driver.on_activate(state=None)
+        assert both_threads_alive(), f"run: {run}"
+
         driver.on_deactivate(state=None)
+        assert no_thread_alive()
+
         driver.on_cleanup(state=None)
-        assert driver.joint_states_timer == initial_joints_timer
-        assert driver.gripper_states_timer == initial_states_timer
+        assert no_thread_alive()
 
     driver.on_shutdown(state=None)
-    assert driver.joint_states_timer.is_canceled()
-    assert driver.gripper_states_timer.is_canceled()
+    assert no_thread_alive()
 
 
 def test_driver_checks_if_grippers_need_synchronization(ros2: None):
@@ -517,10 +529,6 @@ def test_driver_uses_separate_callback_group_for_publishers(ros2: None):
     for handler in driver.connection_state_publisher.event_handlers:
         assert handler.callback_group != driver.default_callback_group
 
-    # Timers
-    assert driver.joint_states_timer.callback_group != driver.default_callback_group
-    assert driver.gripper_states_timer.callback_group != driver.default_callback_group
-
     driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
 
@@ -544,35 +552,12 @@ def test_publishing_calls_are_safe_without_publishers(ros2):
     # orphaned publishing callbacks after `on_deactivate`.
     assert driver.joint_state_publishers == {}
     assert driver.gripper_state_publishers == {}
-    driver._publish_joint_states()
-    driver._publish_gripper_states()
+    Thread(target=driver._publish_joint_states, daemon=True).start()
+    Thread(target=driver._publish_gripper_states, daemon=True).start()
+    time.sleep(1.0)
+    driver.joint_states_stop.set()
+    driver.gripper_states_stop.set()
 
-    driver.on_cleanup(state=None)
-
-
-@skip_without_gripper
-def test_timer_callbacks_dont_collide_with_lifecycle_transitions(ros2):
-    driver = Driver("test_timer_collisions")
-    driver.on_configure(state=None)
-
-    # Mimic the timers' callbacks by explicitly calling the publish methods
-    done = False
-
-    def stay_busy() -> None:
-        while not done:
-            driver._publish_joint_states()
-            driver._publish_gripper_states()
-
-    timer_thread = Thread(target=stay_busy)
-    timer_thread.start()
-
-    start = time.time()
-    while time.time() < start + 2.0:
-        driver.on_activate(state=None)
-        driver.on_deactivate(state=None)
-    done = True
-
-    timer_thread.join()
     driver.on_cleanup(state=None)
 
 
