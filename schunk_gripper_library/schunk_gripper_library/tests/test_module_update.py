@@ -86,3 +86,32 @@ def test_driver_counts_module_updates():
     # Resets counter after new connect calls
     assert not driver.connect()
     assert driver.update_count == 0
+
+
+@skip_without_gripper
+def test_driver_updates_with_specified_cycle():
+    driver = Driver()
+    duration = 1.0
+
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        update_cycles = [0.1, 0.05, 0.01]
+        for cycle in update_cycles:
+            driver.connect(
+                host=host,
+                port=port,
+                serial_port=serial_port,
+                device_id=12,
+                update_cycle=cycle,
+            )
+
+            time.sleep(duration)
+            driver.disconnect()
+            expected_count = int(duration / cycle)
+
+            # Slightly more updates is ok here to compensate
+            # for rounding errors with low cycles.
+            assert (
+                driver.update_count >= expected_count
+            ), f"with update cycle: {cycle} on host: {host}"

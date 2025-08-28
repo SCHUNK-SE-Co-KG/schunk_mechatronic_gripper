@@ -859,12 +859,14 @@ class Driver(object):
     def _module_update(self, update_cycle: float) -> None:
         self.disconnect_request.clear()
         fails = 0
+        next_time = time.perf_counter()
         while not self.disconnect_request.is_set():
             if self.receive_plc_input():
                 self.connected = True
                 self.update_count += 1
                 fails = 0
-                time.sleep(update_cycle)
+                time.sleep(max(0, next_time - time.perf_counter()))
+                next_time += update_cycle
             else:
                 self.connected = False
                 fails += 1
