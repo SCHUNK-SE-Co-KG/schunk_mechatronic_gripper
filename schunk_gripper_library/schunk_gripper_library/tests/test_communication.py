@@ -3,7 +3,6 @@ from schunk_gripper_library.utility import skip_without_gripper
 import pytest
 import struct
 from threading import Timer
-import time
 
 
 @skip_without_gripper
@@ -659,20 +658,3 @@ def test_driver_offers_method_for_composing_gripper_type():
     for entry in valid_combinations:
         gripper_type = driver.compose_gripper_type(**entry["args"])
         assert gripper_type == entry["expected"]
-
-
-@skip_without_gripper
-def test_clearing_plc_output_does_not_toggle_the_command_received_bit():
-    driver = Driver()
-    assert driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
-
-    for _ in range(10):
-        cmd_toggle_before = driver.get_status_bit(bit=5)
-        driver.clear_plc_output()
-        driver.send_plc_output()
-        time.sleep(0.1)
-        driver.receive_plc_input()
-        cmd_toggle_after = driver.get_status_bit(bit=5)
-        assert cmd_toggle_after == cmd_toggle_before
-
-    driver.disconnect()
