@@ -981,6 +981,8 @@ class Driver(object):
     def get_variant(self) -> str:
         if not self.module:
             return ""
+        if self.module not in self.valid_module_types.values():
+            return ""
         if self.module.startswith("EGU"):
             return "EGU"
         elif self.module.startswith("EGK"):

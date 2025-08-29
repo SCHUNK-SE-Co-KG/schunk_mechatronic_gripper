@@ -778,45 +778,26 @@ def test_driver_can_detect_variant():
     driver = Driver()
     assert driver.get_variant() == ""  # when unconnected
 
-    egk_types = [
-        "EGK_25_M_B",
-        "EGK_25_N_B",
-        "EGK_40_M_B",
-        "EGK_40_N_B",
-        "EGK_50_M_B",
-        "EGK_50_N_B",
-    ]
-    egu_types = [
-        "EGU_50_M_B",
-        "EGU_60_M_SD",
-        "EGU_70_N_B",
-        "EGU_80_N_B",
-    ]
-    ezu_types = [
-        "EZU_30_M_B",
-        "EZU_30_M_SD",
-        "EZU_40_N_SD",
-    ]
+    for module in driver.valid_module_types.values():
+        driver.module = module
+        expected = module.split("_")[0]
+        assert driver.get_variant() == expected
+
     unknown_types = [
         "XYZ_99_PN_M",
         "UG4_DIO_80",
         "0x0048",
         "???",
         "_EGU_40_M_B",
+        "_EGU_40_M_B",
+        " EGK_123",
+        "EGu_5",
+        "EGU_90_M_B",
+        "EGK_100_E_Z",
+        "EZU_42_M_SD",
+        "",
     ]
 
-    for type_str in egk_types:
+    for idx, type_str in enumerate(unknown_types):
         driver.module = type_str
-        assert driver.get_variant() == "EGK"
-
-    for type_str in egu_types:
-        driver.module = type_str
-        assert driver.get_variant() == "EGU"
-
-    for type_str in ezu_types:
-        driver.module = type_str
-        assert driver.get_variant() == "EZU"
-
-    for type_str in unknown_types:
-        driver.module = type_str
-        assert driver.get_variant() == ""
+        assert driver.get_variant() == "", f"wrong type at index: {idx}"
