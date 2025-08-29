@@ -487,69 +487,58 @@ class Driver(object):
             return abs(still_to_go) / (ratio * self.module_parameters["max_grp_vel"])
         return 0.0
 
-    def jog_positive(self, velocity: int, gpe: bool = False) -> bool:
+    def start_jogging(
+        self, velocity: int, gpe: bool = False, scheduler: Scheduler | None = None
+    ) -> bool:
         if not self.connected:
             return False
 
-        self.clear_plc_output()
-        self.send_plc_output()
+        if not self.set_target_speed(abs(velocity)):
+            return False
 
-        cmd_toggle_before = self.get_status_bit(bit=5)
-        self.set_control_bit(bit=9, value=True)
+        def do() -> bool:
+            cmd_toggle_before = self.get_status_bit(bit=5)
+            self.clear_plc_output()
+            self.send_plc_output()
 
-        if gpe:
-            self.set_control_bit(bit=31, value=self.gpe_available())
+            if velocity >= 0:
+                self.set_control_bit(bit=9, value=True)
+                self.set_control_bit(bit=8, value=False)
+            else:
+                self.set_control_bit(bit=9, value=False)
+                self.set_control_bit(bit=8, value=True)
+
+            if gpe:
+                self.set_control_bit(bit=31, value=self.gpe_available())
+            else:
+                self.set_control_bit(bit=31, value=False)
+            self.send_plc_output()
+            desired_bits = {"5": cmd_toggle_before ^ 1}
+            return self.wait_for_status(bits=desired_bits)
+
+        if scheduler:
+            return scheduler.execute(func=partial(do)).result()
         else:
-            self.set_control_bit(bit=31, value=False)
+            return do()
 
-        self.set_target_speed(velocity)
-
-        self.send_plc_output()
-
-        desired_bits = {"5": cmd_toggle_before ^ 1}
-
-        return self.wait_for_status(bits=desired_bits)
-
-    def jog_negative(self, velocity: int, gpe: bool = False) -> bool:
+    def stop_jogging(self, scheduler: Scheduler | None = None) -> bool:
         if not self.connected:
             return False
 
-        self.clear_plc_output()
-        self.send_plc_output()
+        def do() -> bool:
+            cmd_toggle_before = self.get_status_bit(bit=5)
+            self.clear_plc_output()
+            self.send_plc_output()
+            self.set_control_bit(bit=8, value=False)
+            self.set_control_bit(bit=9, value=False)
+            self.send_plc_output()
+            desired_bits = {"5": cmd_toggle_before ^ 1, "13": 1}
+            return self.wait_for_status(bits=desired_bits)
 
-        cmd_toggle_before = self.get_status_bit(bit=5)
-
-        self.set_control_bit(bit=9, value=False)
-        self.set_control_bit(bit=8, value=True)
-
-        if gpe:
-            self.set_control_bit(bit=31, value=self.gpe_available())
+        if scheduler:
+            return scheduler.execute(func=partial(do)).result()
         else:
-            self.set_control_bit(bit=31, value=False)
-
-        self.set_target_speed(velocity)
-
-        self.send_plc_output()
-
-        desired_bits = {"5": cmd_toggle_before ^ 1}
-        return self.wait_for_status(bits=desired_bits)
-
-    def reset_jog(self) -> bool:
-        if not self.connected:
-            return False
-
-        self.clear_plc_output()
-        self.send_plc_output()
-
-        cmd_toggle_before = self.get_status_bit(bit=5)
-
-        self.set_control_bit(bit=8, value=False)
-        self.set_control_bit(bit=9, value=False)
-
-        self.send_plc_output()
-        desired_bits = {"5": cmd_toggle_before ^ 1, "13": 1}
-
-        return self.wait_for_status(bits=desired_bits, timeout_sec=2)
+            return do()
 
     def receive_plc_input(self) -> bool:
         with self.input_buffer_lock:

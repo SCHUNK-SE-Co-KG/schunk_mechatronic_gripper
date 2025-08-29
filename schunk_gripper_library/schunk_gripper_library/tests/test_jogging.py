@@ -1,49 +1,42 @@
 from schunk_gripper_library.utility import skip_without_gripper
 from schunk_gripper_library.driver import Driver
+import time
 
 
 @skip_without_gripper
-def test_jog():
-    fast_test_vel = 22000
-    slow_test_vel = 50
+def test_driver_offers_start_and_stop_jogging():
+
     driver = Driver()
 
-    # Jog mode communication over TCP is not testable yet.
-    for host, port, serial_port in zip(
-        [None],
-        [None],
-        ["/dev/ttyUSB0"],
-    ):
-        try:
-            # not connected
-            assert not driver.jog_positive(velocity=fast_test_vel)
+    # When not connected
+    assert not driver.start_jogging(velocity=-1000)
+    assert not driver.stop_jogging()
 
-            assert not driver.jog_negative(velocity=fast_test_vel)
+    # Setup
+    assert driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
+    max_pos = driver.module_parameters["max_pos"]
+    min_pos = driver.module_parameters["min_pos"]
+    max_vel = driver.module_parameters["max_vel"]
+    middle = int(0.5 * (max_pos - min_pos))
 
-            # after connection
-            assert driver.connect(
-                host=host, port=port, serial_port=serial_port, device_id=12
-            )
+    def reset() -> bool:
+        return driver.acknowledge() and driver.move_to_absolute_position(
+            position=middle, velocity=max_vel
+        )
 
-            assert driver.acknowledge()
+    # Positive jogging
+    assert reset()
+    assert driver.start_jogging(+max_vel)
+    time.sleep(0.5)
+    assert driver.get_actual_position() > middle
+    assert driver.stop_jogging()
 
-            assert driver.jog_positive(
-                velocity=fast_test_vel
-            ), driver.get_status_diagnostics()
+    # Negative jogging
+    assert reset()
+    assert driver.start_jogging(-max_vel)
+    time.sleep(0.5)
+    assert driver.get_actual_position() < middle
+    assert driver.stop_jogging()
 
-            assert driver.reset_jog(), driver.get_status_diagnostics()
-
-            assert driver.jog_negative(
-                velocity=slow_test_vel
-            ), driver.get_status_diagnostics()
-
-            assert driver.reset_jog(), driver.get_status_diagnostics()
-
-            assert driver.jog_positive(
-                velocity=fast_test_vel, timeout=10
-            ), driver.get_status_diagnostics()
-
-            assert driver.reset_jog(), driver.get_status_diagnostics()
-
-        finally:
-            assert driver.disconnect()
+    # Cleanup
+    driver.disconnect()
