@@ -600,6 +600,19 @@ class Driver(object):
             return True
         return False
 
+    def get_variant(self) -> str:
+        if not self.module:
+            return ""
+        if self.module not in self.valid_module_types.values():
+            return ""
+        if self.module.startswith("EGU"):
+            return "EGU"
+        elif self.module.startswith("EGK"):
+            return "EGK"
+        elif self.module.startswith("EZU"):
+            return "EZU"
+        return ""
+
     def update_module_parameters(self) -> bool:
 
         if not self.connected:
@@ -977,16 +990,3 @@ class Driver(object):
     def _trace_connect(self, connect: bool) -> None:
         txt = "Connected" if connect else "Disconnected"
         print(f"---> {txt}")
-
-    def get_variant(self) -> str:
-        if not self.module:
-            return ""
-        if self.module not in self.valid_module_types.values():
-            return ""
-        if self.module.startswith("EGU"):
-            return "EGU"
-        elif self.module.startswith("EGK"):
-            return "EGK"
-        elif self.module.startswith("EZU"):
-            return "EZU"
-        return ""
