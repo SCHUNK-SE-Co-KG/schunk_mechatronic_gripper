@@ -509,7 +509,7 @@ def test_driver_implements_soft_grip_and_release(lifecycle_interface):
 
     # Get gripper services
     for gripper in driver.list_grippers():
-        if gripper.startswith("EGU") or gripper.startswith("EZU"):
+        if not gripper.startswith("EGK"):
             driver.change_state(Transition.TRANSITION_DEACTIVATE)
             driver.change_state(Transition.TRANSITION_CLEANUP)
             node.destroy_node()
@@ -588,7 +588,7 @@ def test_driver_implements_soft_grip_at_position_and_release(lifecycle_interface
 
     # Get gripper services
     for gripper in driver.list_grippers():
-        if gripper.startswith("EGU") or gripper.startswith("EZU"):
+        if not gripper.startswith("EGK"):
             driver.change_state(Transition.TRANSITION_DEACTIVATE)
             driver.change_state(Transition.TRANSITION_CLEANUP)
             node.destroy_node()
@@ -692,7 +692,7 @@ def test_driver_implements_strong_grip_and_release(lifecycle_interface):
 
     # Only run for grippers that support StrongGrip
     for gripper in driver.list_grippers():
-        if gripper.startswith("EGK"):
+        if not gripper.startswith("EGU") and not gripper.startswith("EZU"):
             driver.change_state(Transition.TRANSITION_DEACTIVATE)
             driver.change_state(Transition.TRANSITION_CLEANUP)
             node.destroy_node()
@@ -888,7 +888,7 @@ def test_driver_implements_soft_grip_with_or_without_gpe(lifecycle_interface):
     node = Node("soft_grip_service_with_or_without_gpe")
 
     for gripper in driver.list_grippers():
-        if gripper.startswith("EGU") or gripper.startswith("EZU"):
+        if not gripper.startswith("EGK"):
             driver.change_state(Transition.TRANSITION_DEACTIVATE)
             driver.change_state(Transition.TRANSITION_CLEANUP)
             node.destroy_node()

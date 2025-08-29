@@ -464,30 +464,20 @@ class Driver(Node):
 
             if gripper["driver"].get_variant() == "EGK":
                 if gripper["driver"].gpe_available():
-                    ServiceType = SoftGripGPE
+                    service_types = [SoftGripGPE, SoftGripAtPositionGPE]
                 else:
-                    ServiceType = SoftGrip
-                self.gripper_services.append(
-                    self.create_service(
-                        ServiceType,
-                        f"~/{gripper_id}/soft_grip",
-                        partial(self._grip_cb, gripper=gripper),
-                        callback_group=self.gripper_services_cb_group,
-                    )
-                )
+                    service_types = [SoftGrip, SoftGripAtPosition]
 
-                if gripper["driver"].gpe_available():
-                    ServiceType = SoftGripAtPositionGPE
-                else:
-                    ServiceType = SoftGripAtPosition
-                self.gripper_services.append(
-                    self.create_service(
-                        ServiceType,
-                        f"~/{gripper_id}/soft_grip_at_position",
-                        partial(self._grip_cb, gripper=gripper),
-                        callback_group=self.gripper_services_cb_group,
+                service_names = ["soft_grip", "soft_grip_at_position"]
+                for srv_name, srv_type in zip(service_names, service_types):
+                    self.gripper_services.append(
+                        self.create_service(
+                            srv_type,
+                            f"~/{gripper_id}/{srv_name}",
+                            partial(self._grip_cb, gripper=gripper),
+                            callback_group=self.gripper_services_cb_group,
+                        )
                     )
-                )
 
             if (
                 gripper["driver"].get_variant() in ["EGU", "EZU"]
