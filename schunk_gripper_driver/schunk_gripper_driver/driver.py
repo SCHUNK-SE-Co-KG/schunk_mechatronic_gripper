@@ -437,30 +437,20 @@ class Driver(Node):
             )
 
             if gripper["driver"].gpe_available():
-                ServiceType = GripGPE
+                service_types = [GripGPE, GripAtPositionGPE]
             else:
-                ServiceType = Grip
-            self.gripper_services.append(
-                self.create_service(
-                    ServiceType,
-                    f"~/{gripper_id}/grip",
-                    partial(self._grip_cb, gripper=gripper),
-                    callback_group=self.gripper_services_cb_group,
-                )
-            )
+                service_types = [Grip, GripAtPosition]
 
-            if gripper["driver"].gpe_available():
-                ServiceType = GripAtPositionGPE
-            else:
-                ServiceType = GripAtPosition
-            self.gripper_services.append(
-                self.create_service(
-                    ServiceType,
-                    f"~/{gripper_id}/grip_at_position",
-                    partial(self._grip_cb, gripper=gripper),
-                    callback_group=self.gripper_services_cb_group,
+            service_names = ["grip", "grip_at_position"]
+            for srv_name, srv_type in zip(service_names, service_types):
+                self.gripper_services.append(
+                    self.create_service(
+                        srv_type,
+                        f"~/{gripper_id}/{srv_name}",
+                        partial(self._grip_cb, gripper=gripper),
+                        callback_group=self.gripper_services_cb_group,
+                    )
                 )
-            )
 
             if gripper["driver"].get_variant() == "EGK":
                 if gripper["driver"].gpe_available():
