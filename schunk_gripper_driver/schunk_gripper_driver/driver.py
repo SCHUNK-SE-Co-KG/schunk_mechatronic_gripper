@@ -432,7 +432,7 @@ class Driver(Node):
                 self.create_service(
                     ServiceType,
                     f"~/{gripper_id}/move_to_absolute_position",
-                    partial(self._move_to_absolute_position_cb, gripper=gripper),
+                    partial(self._move_to_position_cb, gripper=gripper),
                     callback_group=self.gripper_services_cb_group,
                 )
             )
@@ -872,21 +872,21 @@ class Driver(Node):
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
-    def _move_to_absolute_position_cb(
+    def _move_to_position_cb(
         self,
         request,
         response,
         gripper: Gripper,
     ):
-        self.get_logger().debug("---> Move to absolute position")
-        position = int(request.position * 1e6)
+        self.get_logger().debug("---> Move to position")
+        abs_position = int(request.abs_position * 1e6)
         velocity = int(request.velocity * 1e6)
 
         use_gpe = getattr(request, "use_gpe", False)
 
         if self.needs_synchronize(gripper):
-            response.success = gripper["driver"].move_to_absolute_position(
-                position=position,
+            response.success = gripper["driver"].move_to_position(
+                abs_position=abs_position,
                 velocity=velocity,
                 use_gpe=use_gpe,
                 scheduler=self.scheduler,

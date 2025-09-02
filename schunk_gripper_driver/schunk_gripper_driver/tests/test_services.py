@@ -22,9 +22,19 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     AddGripper,
     MoveToAbsolutePosition,
     MoveToAbsolutePositionGPE,
+    Grip,
+    GripGPE,
     Release,
     ShowConfiguration,
     ShowGripperSpecification,
+    SoftGrip,
+    SoftGripGPE,
+    StrongGripAtPositionGPE,
+    StrongGripGPE,
+    SoftGripAtPosition,
+    SoftGripAtPositionGPE,
+    GripAtPosition,
+    GripAtPositionGPE,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -973,3 +983,4 @@ def test_driver_implements_start_and_stop_jogging(lifecycle_interface):
 
             # stop
             future = stop_jogging_client.call_async(Trigger.Request())
+            

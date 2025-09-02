@@ -20,7 +20,7 @@ def test_driver_supports_profinet_grippers():
 
     # Move the gripper.
     # This proves that reading and writing parameters works.
-    assert driver.move_to_absolute_position(position=max_pos, velocity=max_vel)
-    assert driver.move_to_absolute_position(position=min_pos, velocity=max_vel)
-    assert driver.move_to_absolute_position(position=half, velocity=max_vel)
+    assert driver.move_to_position(abs_position=max_pos, velocity=max_vel)
+    assert driver.move_to_position(abs_position=min_pos, velocity=max_vel)
+    assert driver.move_to_position(abs_position=half, velocity=max_vel)
     driver.disconnect()
