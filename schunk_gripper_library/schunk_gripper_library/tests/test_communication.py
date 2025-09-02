@@ -774,6 +774,33 @@ def test_driver_estimates_duration_of_strong_grip():
     driver.disconnect()
 
 
+@skip_without_gripper
+def test_driver_estimates_duration_of_strong_grip_at_position():
+    driver = Driver()
+
+    driver.connect(serial_port="/dev/ttyUSB0", device_id=12, update_cycle=None)
+    max_pos = driver.module_parameters["max_pos"]
+    min_pos = driver.module_parameters["min_pos"]
+    mid_pos = (min_pos + max_pos) // 2
+
+    def set_actual_position(position: int) -> None:
+        driver.plc_input_buffer[4:8] = bytes(struct.pack("i", position))
+
+    # Start near mid_pos
+    set_actual_position(mid_pos - 1000)
+    forces = [130, 175, 200]
+
+    durations = []
+    for force in forces:
+        duration = driver.estimate_duration(position_abs=mid_pos, force=force)
+        durations.append(duration)
+
+    assert durations[0] > durations[1] > durations[2]
+
+    # Cleanup
+    driver.disconnect()
+
+
 def test_driver_can_detect_variant():
     driver = Driver()
     assert driver.get_variant() == ""  # when unconnected

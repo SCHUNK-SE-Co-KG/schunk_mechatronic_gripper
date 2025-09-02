@@ -501,7 +501,7 @@ class Driver(object):
             still_to_go = position_abs - self.get_actual_position()
             if isinstance(velocity, int) and velocity > 0:
                 return abs(still_to_go) / velocity
-            if isinstance(force, int) and 0 < force <= 100:
+            if isinstance(force, int) and 0 < force <= 200:
                 grip_vel = (force / 100) * self.module_parameters["max_grp_vel"]
                 return abs(still_to_go) / grip_vel
             if self.module_parameters.get("max_grp_vel"):
