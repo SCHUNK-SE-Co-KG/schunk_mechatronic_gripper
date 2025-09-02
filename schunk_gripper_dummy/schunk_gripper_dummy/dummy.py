@@ -456,4 +456,45 @@ class Dummy(object):
             self.clear_plc_output()
             return
 
+        # Start jogging
+        def keep_jogging(negative: bool = False) -> None:
+            if negative:
+                target_pos = self.min_position
+                jog_bit = 8
+            else:
+                target_pos = self.max_position
+                jog_bit = 9
+
+            motion = LinearMotion(
+                initial_pos=self.get_actual_position(),
+                initial_speed=self.get_actual_speed(),
+                target_pos=target_pos,
+                target_speed=self.get_target_speed(),
+            )
+            start = time.time()
+            actual_pos, actual_speed = motion.sample(0)
+            while (
+                self.get_control_bit(bit=jog_bit) == 1
+                and abs(target_pos - actual_pos) > 1
+            ):  # um
+                t = time.time() - start
+                actual_pos, actual_speed = motion.sample(t)
+                self.set_actual_position(actual_pos)
+                self.set_actual_speed(actual_speed)
+                time.sleep(0.01)
+            print("Done!")
+
+        if self.get_control_bit(bit=9) == 1:
+            Timer(interval=0.0, function=keep_jogging).start()
+            return
+        if self.get_control_bit(bit=8) == 1:
+            Timer(
+                interval=0.0, function=keep_jogging, kwargs={"negative": True}
+            ).start()
+            return
+
+        # Stop jogging
+        if self.get_control_bit(bit=8) == 0 or self.get_control_bit(bit=9) == 0:
+            pass
+
         self.clear_plc_output()

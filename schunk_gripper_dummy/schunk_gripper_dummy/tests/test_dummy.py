@@ -97,9 +97,13 @@ def test_dummy_starts_with_cleared_control_bits():
         assert dummy.get_control_bit(bit=bit) == 0
 
 
-def test_dummy_clears_control_bits_after_processing():
+def test_dummy_clears_relevant_control_bits_after_processing():
     dummy = Dummy()
-    for bit in dummy.valid_control_bits[1:]:  # without fast_stop
+    for bit in dummy.valid_control_bits:
+        if bit == 0:  # fast_stop
+            continue
+        if bit == 9 or bit == 8:  # jogging bits
+            continue
         dummy.set_control_bit(bit=bit, value=True)
         dummy.process_control_bits()
         assert dummy.get_control_bit(bit=bit) == 0
@@ -394,3 +398,49 @@ def test_dummy_handles_events():
         assert not dummy.reachable
         time.sleep(duration + buffer)
         assert dummy.reachable
+
+
+def test_dummy_supports_jogging():
+    dummy = Dummy()
+    dummy.acknowledge()
+
+    jogging_bits = [9, 8]  # positive, negative jogging
+
+    middle = int((dummy.max_position - dummy.min_position) / 2)
+    dummy.set_actual_position(middle)
+
+    for jog_bit in jogging_bits:
+
+        # Start jogging
+        pos_before = dummy.get_actual_position()
+        toggle_before = dummy.get_status_bit(bit=5)
+        dummy.set_control_bit(bit=jog_bit, value=True)
+        target_speed = dummy.max_grp_vel
+        dummy.plc_output_buffer[8:12] = bytes(struct.pack("i", target_speed))
+        dummy.process_control_bits()
+        toggle_after = dummy.get_status_bit(bit=5)
+        assert toggle_after != toggle_before
+
+        # Let it run for some time
+        time.sleep(0.2)
+        pos_later = dummy.get_actual_position()
+        time.sleep(0.2)
+
+        # Stop jogging and check that we no longer move
+        dummy.set_control_bit(bit=jog_bit, value=False)
+        dummy.process_control_bits()
+        time.sleep(0.1)
+        when_stopped = dummy.get_actual_position()
+        time.sleep(0.1)
+        assert dummy.get_actual_position() == when_stopped
+
+        # Check motion
+        pos_after = dummy.get_actual_position()
+        if jog_bit == 9:
+            assert (
+                pos_after > pos_later > pos_before
+            ), f"{pos_after} {pos_later} {pos_before}"
+        if jog_bit == 8:
+            assert (
+                pos_after < pos_later < pos_before
+            ), f"{pos_after} {pos_later} {pos_before}"
