@@ -12,10 +12,10 @@ class Setup(object):
             return False
         max_pos = self.driver.module_parameters["max_pos"]
         min_pos = self.driver.module_parameters["min_pos"]
-        self.max_vel = self.driver.module_parameters["max_vel"]
-        self.middle = int(0.5 * (max_pos - min_pos))
+        self.max_vel = self.driver.module_parameters["max_grp_vel"]
+        middle = int(0.5 * (max_pos - min_pos))
         return self.driver.acknowledge() and self.driver.move_to_absolute_position(
-            position=self.middle, velocity=self.max_vel
+            position=middle, velocity=self.max_vel
         )
 
 
@@ -28,22 +28,46 @@ def test_driver_offers_start_and_stop_jogging():
     assert not driver.stop_jogging()
 
     # Setup
-    assert driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
+    assert driver.connect(host="0.0.0.0", port=8000)
     setup = Setup(driver)
 
     # Positive jogging
     assert setup.reset()
-    assert driver.start_jogging(+setup.max_vel)
+    before = driver.get_actual_position()
+    assert driver.start_jogging(setup.max_vel)
     time.sleep(0.5)
-    assert driver.get_actual_position() > setup.middle
     assert driver.stop_jogging()
+    assert driver.get_actual_position() > before
 
     # Negative jogging
     assert setup.reset()
+    before = driver.get_actual_position()
     assert driver.start_jogging(-setup.max_vel)
     time.sleep(0.5)
-    assert driver.get_actual_position() < setup.middle
     assert driver.stop_jogging()
+    assert driver.get_actual_position() < before
 
     # Cleanup
+    driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_allows_repeatedly_calling_jogging_methods():
+    driver = Driver()
+
+    assert driver.connect(host="0.0.0.0", port=8000)
+    setup = Setup(driver)
+    assert setup.reset()
+
+    # Repeated starting
+    for run in range(3):
+        assert driver.start_jogging(
+            setup.max_vel
+        ), f"run: {run}, diagnostics: {driver.get_status_diagnostics()}"
+    driver.stop_jogging()
+
+    # Repeated stopping
+    for _ in range(3):
+        assert driver.stop_jogging()
+
     driver.disconnect()

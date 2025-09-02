@@ -493,25 +493,20 @@ class Driver(object):
         if not self.connected:
             return False
 
-        if not self.set_target_speed(abs(velocity)):
-            return False
-
         def do() -> bool:
-            cmd_toggle_before = self.get_status_bit(bit=5)
             self.clear_plc_output()
             self.send_plc_output()
+            cmd_toggle_before = self.get_status_bit(bit=5)
 
+            if not self.set_target_speed(abs(velocity)):
+                return False
             if velocity >= 0:
                 self.set_control_bit(bit=9, value=True)
-                self.set_control_bit(bit=8, value=False)
             else:
-                self.set_control_bit(bit=9, value=False)
                 self.set_control_bit(bit=8, value=True)
-
             if gpe:
                 self.set_control_bit(bit=31, value=self.gpe_available())
-            else:
-                self.set_control_bit(bit=31, value=False)
+
             self.send_plc_output()
             desired_bits = {"5": cmd_toggle_before ^ 1}
             return self.wait_for_status(bits=desired_bits)
@@ -526,14 +521,9 @@ class Driver(object):
             return False
 
         def do() -> bool:
-            cmd_toggle_before = self.get_status_bit(bit=5)
             self.clear_plc_output()
             self.send_plc_output()
-            self.set_control_bit(bit=8, value=False)
-            self.set_control_bit(bit=9, value=False)
-            self.send_plc_output()
-            desired_bits = {"5": cmd_toggle_before ^ 1, "13": 1}
-            return self.wait_for_status(bits=desired_bits)
+            return True
 
         if scheduler:
             return scheduler.execute(func=partial(do)).result()
