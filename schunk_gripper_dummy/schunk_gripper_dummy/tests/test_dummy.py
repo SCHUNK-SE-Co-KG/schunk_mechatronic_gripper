@@ -444,3 +444,18 @@ def test_dummy_supports_jogging():
             assert (
                 pos_after < pos_later < pos_before
             ), f"{pos_after} {pos_later} {pos_before}"
+
+
+def test_dummy_doesnt_move_when_both_jogging_bits_are_set():
+    dummy = Dummy()
+    dummy.acknowledge()
+
+    dummy.set_control_bit(bit=9, value=True)
+    dummy.set_control_bit(bit=8, value=True)
+    target_speed = dummy.max_grp_vel
+    dummy.plc_output_buffer[8:12] = bytes(struct.pack("i", target_speed))
+    before = dummy.get_actual_position()
+    dummy.process_control_bits()
+
+    time.sleep(0.5)
+    assert dummy.get_actual_position() == before

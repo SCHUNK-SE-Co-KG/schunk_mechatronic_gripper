@@ -484,6 +484,8 @@ class Dummy(object):
                 time.sleep(0.01)
             print("Done!")
 
+        if self.get_control_bit(bit=9) == 1 and self.get_control_bit(bit=8) == 1:
+            return
         if self.get_control_bit(bit=9) == 1:
             Timer(interval=0.0, function=keep_jogging).start()
             return
