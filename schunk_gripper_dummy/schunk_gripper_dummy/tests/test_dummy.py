@@ -2,6 +2,8 @@ from schunk_gripper_dummy.dummy import Dummy
 import pytest
 import struct
 import time
+import threading
+
 
 # [1]: https://stb.cloud.schunk.com/media/IM0046706.PDF
 
@@ -459,3 +461,24 @@ def test_dummy_doesnt_move_when_both_jogging_bits_are_set():
 
     time.sleep(0.5)
     assert dummy.get_actual_position() == before
+
+
+def test_dummy_manages_repeatedly_setting_jogging_bits():
+    dummy = Dummy()
+    dummy.acknowledge()
+
+    threads_before = threading.active_count()
+    jogging_bits = [8, 9, 8, 8, 9, 9]
+
+    # There should only be one additional thread for jogging
+    for jog_bit in jogging_bits:
+        for _ in range(5):
+            dummy.set_control_bit(bit=jog_bit, value=True)
+            dummy.process_control_bits()
+
+        assert threading.active_count() == threads_before + 1, f"for jog bit: {jog_bit}"
+        dummy.set_control_bit(bit=jog_bit, value=False)
+        time.sleep(0.1)
+
+    # Finish
+    assert threading.active_count() == threads_before
