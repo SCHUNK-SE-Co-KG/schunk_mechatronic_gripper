@@ -347,3 +347,74 @@ def test_driver_implements_loading_previous_configuration(driver):
     future = client.call_async(Trigger.Request())
     rclpy.spin_until_future_complete(node, future)
     assert future.result().success
+
+
+@skip_without_gripper
+def test_driver_implements_start_and_stop_jogging(lifecycle_interface):
+    driver = lifecycle_interface
+
+    node = Node("start_jogging")
+    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
+    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
+    assert add_client.wait_for_service(timeout_sec=2)
+    assert reset_client.wait_for_service(timeout_sec=2)
+
+    # Drop default modbus gripper because jogging is broken there
+    request = Trigger.Request()
+    future = reset_client.call_async(request)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    # Add TCP/IP gripper
+    request = AddGripper.Request()
+    request.gripper.host = "0.0.0.0"
+    request.gripper.port = 8000
+    future = add_client.call_async(request)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    # Get the gripper's services
+    for gripper in driver.list_grippers():
+        StartJogging = driver.get_service_type(
+            f"/schunk/driver/{gripper}/start_jogging"
+        )
+        start_jogging_client = node.create_client(
+            StartJogging,
+            f"/schunk/driver/{gripper}/start_jogging",
+        )
+        assert start_jogging_client.wait_for_service(
+            timeout_sec=2
+        ), f"gripper: {gripper}"
+        stop_jogging_client = node.create_client(
+            Trigger,
+            f"/schunk/driver/{gripper}/stop_jogging",
+        )
+        assert stop_jogging_client.wait_for_service(
+            timeout_sec=2
+        ), f"gripper: {gripper}"
+
+        targets = [
+            {"velocity": 0.010, "use_gpe": False},
+            {"velocity": 0.0100, "use_gpe": True},
+            {"velocity": 0.075, "use_gpe": False},
+            {"velocity": 0.08, "use_gpe": True},
+        ]
+        for target in targets:
+
+            # Start
+            request = StartJogging.Request()
+            request.use_gpe = target["use_gpe"]
+            future = start_jogging_client.call_async(request)
+            rclpy.spin_until_future_complete(node, future)
+            assert future.result().success, f"{future.result().message}, for {target}"
+
+            # stop
+            future = stop_jogging_client.call_async(Trigger.Request())
+            rclpy.spin_until_future_complete(node, future)
+            assert future.result().success, f"{future.result().message}"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
