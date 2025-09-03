@@ -284,19 +284,20 @@ class Driver(object):
 
     def move_to_position(
         self,
-        abs_position: int,
+        position: int,
         velocity: int,
+        is_absolute: bool = True,
         use_gpe: bool = False,
         scheduler: Scheduler | None = None,
     ) -> bool:
         if not self.connected:
             return False
-        if not self.set_target_position(abs_position):
+        if not self.set_target_position(position):
             return False
         if not self.set_target_speed(velocity):
             return False
 
-        if abs_position is not None:
+        if is_absolute:
             trigger_bit = 13
 
         def start():
@@ -308,8 +309,7 @@ class Driver(object):
                 self.set_control_bit(bit=31, value=use_gpe)
             else:
                 self.set_control_bit(bit=31, value=False)
-            if abs_position is not None:
-                self.set_target_position(abs_position)
+            self.set_target_position(position)
             self.set_target_speed(velocity)
             self.send_plc_output()
             desired_bits = {"5": cmd_toggle_before ^ 1, "3": 0}
@@ -319,9 +319,7 @@ class Driver(object):
             desired_bits = {"13": 1, "4": 1}
             return self.wait_for_status(bits=desired_bits)
 
-        duration_sec = self.estimate_duration(
-            position_abs=abs_position, velocity=velocity
-        )
+        duration_sec = self.estimate_duration(position_abs=position, velocity=velocity)
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
                 return False

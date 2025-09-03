@@ -984,3 +984,6 @@ def test_driver_implements_start_and_stop_jogging(lifecycle_interface):
             # stop
             future = stop_jogging_client.call_async(Trigger.Request())
             
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+    node.destroy_node()

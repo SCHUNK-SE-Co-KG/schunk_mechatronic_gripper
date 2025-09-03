@@ -69,7 +69,7 @@ def test_all_gripper_commands_run_with_a_scheduler():
     half = int(0.5 * (max_pos - min_pos))
     max_vel = driver.module_parameters["max_vel"]
     assert driver.move_to_position(
-        abs_position=half, velocity=max_vel, scheduler=scheduler
+        position=half, velocity=max_vel, scheduler=scheduler
     ), f"driver status: {driver.get_status_diagnostics()}"
 
     # Grip
@@ -104,13 +104,13 @@ def test_move_to_absolute_position_fails_with_invalid_arguments():
         driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
         driver.acknowledge()
         combinations = [
-            {"abs_position": 0.1, "velocity": 1000},
-            {"abs_position": -0.1, "velocity": 1000},
-            {"abs_position": 1000, "velocity": -1.234},
-            {"abs_position": 1000, "velocity": -5005},
-            {"abs_position": 1000, "velocity": 177.33},
-            {"abs_position": 1000, "velocity": 0},
-            {"abs_position": 1000, "velocity": 0.0},
+            {"position": 0.1, "velocity": 1000},
+            {"position": -0.1, "velocity": 1000},
+            {"position": 1000, "velocity": -1.234},
+            {"position": 1000, "velocity": -5005},
+            {"position": 1000, "velocity": 177.33},
+            {"position": 1000, "velocity": 0},
+            {"position": 1000, "velocity": 0.0},
         ]
         for args in combinations:
             assert not driver.move_to_position(**args)
@@ -119,7 +119,7 @@ def test_move_to_absolute_position_fails_with_invalid_arguments():
 
 def test_move_to_absolute_position_fails_when_not_connected():
     driver = Driver()
-    assert not driver.move_to_position(abs_position=100, velocity=100)
+    assert not driver.move_to_position(position=100, velocity=100)
 
 
 @skip_without_gripper
@@ -137,9 +137,9 @@ def test_move_to_absolute_position_succeeds_with_valid_arguments():
         half = int(0.5 * (max_pos - min_pos))
         max_vel = driver.module_parameters["max_vel"]
         combinations = [
-            {"abs_position": min_pos, "velocity": max_vel},
-            {"abs_position": max_pos, "velocity": max_vel},
-            {"abs_position": half, "velocity": max_vel},
+            {"position": min_pos, "velocity": max_vel},
+            {"position": max_pos, "velocity": max_vel},
+            {"position": half, "velocity": max_vel},
         ]
         for args in combinations:
             assert driver.move_to_position(
@@ -160,7 +160,7 @@ def test_move_to_absolute_position_uses_gpe_only_when_available():
     min_pos = driver.module_parameters["min_pos"]
     half = int(0.5 * (max_pos - min_pos))
     max_vel = driver.module_parameters["max_vel"]
-    assert driver.move_to_position(abs_position=half, velocity=max_vel, use_gpe=True)
+    assert driver.move_to_position(position=half, velocity=max_vel, use_gpe=True)
     driver.disconnect()
 
 
