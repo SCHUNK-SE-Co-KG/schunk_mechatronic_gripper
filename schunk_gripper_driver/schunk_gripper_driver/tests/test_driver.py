@@ -20,6 +20,7 @@ from std_srvs.srv import Trigger
 from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     AddGripper,
     MoveToAbsolutePosition,
+    MoveToRelativePosition,
     Grip,
     Release,
     StartJogging,
@@ -296,6 +297,30 @@ def test_driver_offers_callback_for_move_to_absolute_position(ros2: None):
             response=res,
             gripper=gripper,
             service_name="move_to_absolute_position",
+        )
+        assert not res.success
+
+    driver.on_deactivate(state=None)
+    driver.on_cleanup(state=None)
+
+
+@skip_without_gripper
+def test_driver_offers_callback_for_move_to_relative_position(ros2: None):
+    driver = Driver("driver")
+    driver.on_configure(state=None)
+    driver.on_activate(state=None)
+
+    # Check if we can call the interface.
+    # It will fail with an empty request, but that's ok.
+    req = MoveToRelativePosition.Request()
+    res = MoveToRelativePosition.Response()
+    for idx, _ in enumerate(driver.grippers):
+        gripper = driver.grippers[idx]
+        driver._move_to_position_cb(
+            request=req,
+            response=res,
+            gripper=gripper,
+            service_name="move_to_relative_position",
         )
         assert not res.success
 

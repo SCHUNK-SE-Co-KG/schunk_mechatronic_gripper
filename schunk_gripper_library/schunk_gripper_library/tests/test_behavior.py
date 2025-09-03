@@ -164,7 +164,6 @@ def test_move_to_absolute_position_uses_gpe_only_when_available():
     driver.disconnect()
 
 
-@pytest.mark.skip
 @skip_without_gripper
 def test_move_to_relative_position():
     test_position = -50000
@@ -177,17 +176,22 @@ def test_move_to_relative_position():
         ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
     ):
         # not connected
-        assert not driver.move_to_relative_position(
-            position=test_position, velocity=test_velocity, use_gpe=test_gpe
+        assert not driver.move_to_position(
+            position=test_position,
+            velocity=test_velocity,
+            use_gpe=test_gpe,
+            is_absolute=False,
         )
-
         # after connection
         assert driver.connect(
             host=host, port=port, serial_port=serial_port, device_id=12
         )
         assert driver.acknowledge()
-        assert driver.move_to_relative_position(
-            position=test_position, velocity=test_velocity, use_gpe=test_gpe
+        assert driver.move_to_position(
+            position=test_position,
+            velocity=test_velocity,
+            use_gpe=test_gpe,
+            is_absolute=False,
         )
 
         assert driver.disconnect()

@@ -855,3 +855,33 @@ def test_driver_estimates_duration_of_move_to_absolute_position():
 
     # Cleanup
     driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_estimates_duration_of_move_to_relative_position():
+    driver = Driver()
+
+    driver.connect(serial_port="/dev/ttyUSB0", device_id=12, update_cycle=None)
+    max_pos = driver.module_parameters["max_pos"]
+    min_pos = driver.module_parameters["min_pos"]
+    mid_pos = (min_pos + max_pos) // 2
+
+    def set_actual_position(position: int) -> None:
+        driver.plc_input_buffer[4:8] = bytes(struct.pack("i", position))
+
+    # Start at mid position
+    set_actual_position(mid_pos)
+    relative_moves = [-20000, -10000, 5000]
+    velocity = 10000
+
+    durations = []
+    for rel_move in relative_moves:
+        duration = driver.estimate_duration(
+            position_abs=rel_move, is_absolute=False, velocity=velocity
+        )
+        durations.append(duration)
+
+    assert durations[0] > durations[1] > durations[2]
+
+    # Cleanup
+    driver.disconnect()

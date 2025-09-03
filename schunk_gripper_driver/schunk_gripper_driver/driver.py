@@ -25,6 +25,8 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     AddGripper,
     MoveToAbsolutePosition,
     MoveToAbsolutePositionGPE,
+    MoveToRelativePosition,
+    MoveToRelativePositionGPE,
     Grip,
     GripGPE,
     GripAtPosition,
@@ -425,11 +427,11 @@ class Driver(Node):
             )
 
             if gripper["driver"].gpe_available():
-                service_types = [MoveToAbsolutePositionGPE]
+                service_types = [MoveToAbsolutePositionGPE, MoveToRelativePositionGPE]
             else:
-                service_types = [MoveToAbsolutePosition]
+                service_types = [MoveToAbsolutePosition, MoveToRelativePosition]
 
-            service_names = ["move_to_absolute_position"]
+            service_names = ["move_to_absolute_position", "move_to_relative_position"]
             for srv_name, srv_type in zip(service_names, service_types):
                 self.gripper_services.append(
                     self.create_service(
