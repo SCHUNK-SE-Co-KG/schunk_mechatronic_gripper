@@ -29,6 +29,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from rclpy.node import Node
 import os
 from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType
+from typing_extensions import Any
+import importlib
 
 
 def get_directory_size(directory):
@@ -155,6 +157,15 @@ class LifecycleInterface(object):
         rclpy.spin_until_future_complete(self.node, future)
         grippers = future.result().grippers
         return grippers
+
+    def get_service_type(self, srv_name: str) -> Any | None:
+        services = self.node.get_service_names_and_types()
+        for name, types in services:
+            if name == srv_name:
+                pkg, _, srv = types[0].split("/")
+                module = importlib.import_module(f"{pkg}.srv")
+                return getattr(module, srv)
+        return None
 
 
 @pytest.fixture(scope="module")
