@@ -19,6 +19,8 @@ rosidl_generate_interfaces(
     srv/Release.srv
     srv/ShowConfiguration.srv
     srv/ShowGripperSpecification.srv
+    srv/StartJogging.srv
+    srv/StartJoggingGPE.srv
     msg/ConnectionState.msg
     msg/Gripper.msg
     msg/GripperState.msg
