@@ -488,7 +488,7 @@ class Driver(object):
         return 0.0
 
     def start_jogging(
-        self, velocity: int, gpe: bool = False, scheduler: Scheduler | None = None
+        self, velocity: int, use_gpe: bool = False, scheduler: Scheduler | None = None
     ) -> bool:
         if not self.connected:
             return False
@@ -504,7 +504,7 @@ class Driver(object):
                 self.set_control_bit(bit=9, value=True)
             else:
                 self.set_control_bit(bit=8, value=True)
-            if gpe:
+            if use_gpe:
                 self.set_control_bit(bit=31, value=self.gpe_available())
 
             self.send_plc_output()

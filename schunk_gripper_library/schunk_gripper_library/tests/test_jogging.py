@@ -31,21 +31,23 @@ def test_driver_offers_start_and_stop_jogging():
     assert driver.connect(host="0.0.0.0", port=8000)
     setup = Setup(driver)
 
-    # Positive jogging
-    assert setup.reset()
-    before = driver.get_actual_position()
-    assert driver.start_jogging(setup.max_vel)
-    time.sleep(0.5)
-    assert driver.stop_jogging()
-    assert driver.get_actual_position() > before
+    for use_gpe in [False, True]:
 
-    # Negative jogging
-    assert setup.reset()
-    before = driver.get_actual_position()
-    assert driver.start_jogging(-setup.max_vel)
-    time.sleep(0.5)
-    assert driver.stop_jogging()
-    assert driver.get_actual_position() < before
+        # Positive jogging
+        assert setup.reset()
+        before = driver.get_actual_position()
+        assert driver.start_jogging(setup.max_vel, use_gpe=use_gpe)
+        time.sleep(0.5)
+        assert driver.stop_jogging()
+        assert driver.get_actual_position() > before
+
+        # Negative jogging
+        assert setup.reset()
+        before = driver.get_actual_position()
+        assert driver.start_jogging(-setup.max_vel, use_gpe=use_gpe)
+        time.sleep(0.5)
+        assert driver.stop_jogging()
+        assert driver.get_actual_position() < before
 
     # Cleanup
     driver.disconnect()
