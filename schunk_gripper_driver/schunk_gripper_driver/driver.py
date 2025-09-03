@@ -26,6 +26,8 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     MoveToAbsolutePosition,
     Grip,
     Release,
+    StartJogging,
+    StartJoggingGPE,
     ShowConfiguration,
     ShowGripperSpecification,
 )
@@ -432,6 +434,26 @@ class Driver(Node):
                     Release,
                     f"~/{gripper_id}/release",
                     partial(self._release_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+            self.gripper_services.append(
+                self.create_service(
+                    srv_type=(
+                        StartJoggingGPE
+                        if gripper["driver"].gpe_available()
+                        else StartJogging
+                    ),
+                    srv_name=f"~/{gripper_id}/start_jogging",
+                    callback=partial(self._start_jogging_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+            self.gripper_services.append(
+                self.create_service(
+                    srv_type=Trigger,
+                    srv_name=f"~/{gripper_id}/stop_jogging",
+                    callback=partial(self._stop_jogging_cb, gripper=gripper),
                     callback_group=self.gripper_services_cb_group,
                 )
             )
@@ -855,6 +877,36 @@ class Driver(Node):
             response.success = gripper["driver"].release(
                 use_gpe=request.use_gpe,
             )
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _start_jogging_cb(
+        self,
+        request: StartJogging.Request | StartJoggingGPE.Request,
+        response: StartJogging.Response | StartJoggingGPE.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Start jogging")
+        response.success = gripper["driver"].start_jogging(
+            velocity=int(request.velocity * 1e6),
+            use_gpe=getattr(request, "use_gpe", False),
+            scheduler=self.scheduler if self.needs_synchronize(gripper) else None,
+        )
+
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _stop_jogging_cb(
+        self,
+        request: Trigger.Request,
+        response: Trigger.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Stop jogging")
+        response.success = gripper["driver"].stop_jogging(
+            scheduler=self.scheduler if self.needs_synchronize(gripper) else None,
+        )
+
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 

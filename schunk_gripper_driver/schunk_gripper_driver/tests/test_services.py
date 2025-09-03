@@ -55,6 +55,8 @@ def test_driver_advertises_state_depending_services(lifecycle_interface):
         "grip",
         "release",
         "show_specification",
+        "start_jogging",
+        "stop_jogging",
     ]
     until_change_takes_effect = 0.1
 
