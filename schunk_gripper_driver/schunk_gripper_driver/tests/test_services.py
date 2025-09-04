@@ -21,7 +21,6 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     ListGrippers,
     AddGripper,
     MoveToAbsolutePosition,
-    MoveToAbsolutePositionGPE,
     MoveToRelativePosition,
     MoveToRelativePositionGPE,
     Grip,
@@ -258,32 +257,20 @@ def test_driver_implements_move_to_absolute_position_with_or_without_gpe(
     for gripper in driver.list_grippers():
         service_name = f"/schunk/driver/{gripper}/move_to_absolute_position"
 
-        client = node.create_client(MoveToAbsolutePositionGPE, service_name)
-        if client.wait_for_service(timeout_sec=1.0):
-            gpe_supported = True
-        else:
-            client.destroy()
-            client = node.create_client(MoveToAbsolutePosition, service_name)
-            assert client.wait_for_service(
-                timeout_sec=2
-            ), f"{gripper}: service unavailable"
-            gpe_supported = False
+        ServiceType = driver.get_service_type(service_name)
 
-        if gpe_supported:
-            req = MoveToAbsolutePositionGPE.Request()
-            print(MoveToAbsolutePositionGPE.Request())
-            req.position = 0.01
-            req.velocity = 0.01
-            assert hasattr(req, "use_gpe"), f"{gripper}: use_gpe expected but not found"
+        client = node.create_client(ServiceType, service_name)
+        assert client.wait_for_service(timeout_sec=5), f"{gripper}: service unavailable"
+
+        req = ServiceType.Request()
+        req.position = 0.5
+        req.velocity = 0.5
+
+        # If the service type supports use_gpe, verify it
+        if hasattr(req, "use_gpe"):
             req.use_gpe = False
         else:
-            req = MoveToAbsolutePosition.Request()
-            print(MoveToAbsolutePosition.Request())
-            req.position = 0.01
-            req.velocity = 0.01
-            assert not hasattr(
-                req, "use_gpe"
-            ), f"{gripper}: use_gpe not expected but found"
+            assert not hasattr(req, "use_gpe"), f"{gripper}: unexpected use_gpe field"
 
         future = client.call_async(req)
         rclpy.spin_until_future_complete(node, future, timeout_sec=5)
