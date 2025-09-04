@@ -10,11 +10,12 @@ class Setup(object):
     def reset(self) -> bool:
         if not self.driver.connected:
             return False
+        assert self.driver.acknowledge()
         max_pos = self.driver.module_parameters["max_pos"]
         min_pos = self.driver.module_parameters["min_pos"]
         self.max_vel = self.driver.module_parameters["max_grp_vel"]
         middle = int(0.5 * (max_pos - min_pos))
-        return self.driver.acknowledge() and self.driver.move_to_absolute_position(
+        return self.driver.move_to_absolute_position(
             position=middle, velocity=self.max_vel
         )
 
@@ -22,6 +23,9 @@ class Setup(object):
 @skip_without_gripper
 def test_driver_offers_start_and_stop_jogging():
     driver = Driver()
+
+    # We need the web dummy for now until the BKS firmware
+    # really moves in simulation.
 
     # When not connected
     assert not driver.start_jogging(velocity=-1000)
@@ -57,14 +61,15 @@ def test_driver_offers_start_and_stop_jogging():
 def test_driver_allows_repeatedly_calling_jogging_methods():
     driver = Driver()
 
-    assert driver.connect(host="0.0.0.0", port=8000)
+    assert driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
     setup = Setup(driver)
     assert setup.reset()
+    velocity = driver.module_parameters["max_grp_vel"]
 
     # Repeated starting
     for run in range(3):
         assert driver.start_jogging(
-            setup.max_vel
+            velocity=velocity
         ), f"run: {run}, diagnostics: {driver.get_status_diagnostics()}"
     driver.stop_jogging()
 
