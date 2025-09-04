@@ -22,16 +22,6 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     AddGripper,
     MoveToAbsolutePosition,
     MoveToAbsolutePositionGPE,
-    Grip,
-    GripGPE,
-    GripAtPosition,
-    GripAtPositionGPE,
-    SoftGrip,
-    SoftGripGPE,
-    SoftGripAtPosition,
-    SoftGripAtPositionGPE,
-    StrongGripGPE,
-    StrongGripAtPositionGPE,
     Release,
     ShowConfiguration,
     ShowGripperSpecification,
@@ -244,6 +234,56 @@ def test_driver_implements_move_to_absolute_position(lifecycle_interface):
 
 
 @skip_without_gripper
+def test_driver_implements_move_to_absolute_position_with_or_without_gpe(
+    lifecycle_interface,
+):
+    driver = lifecycle_interface
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    node = Node("move_to_absolute_position_service_with_or_without_gpe")
+
+    for gripper in driver.list_grippers():
+        service_name = f"/schunk/driver/{gripper}/move_to_absolute_position"
+
+        client = node.create_client(MoveToAbsolutePositionGPE, service_name)
+        if client.wait_for_service(timeout_sec=1.0):
+            gpe_supported = True
+        else:
+            client.destroy()
+            client = node.create_client(MoveToAbsolutePosition, service_name)
+            assert client.wait_for_service(
+                timeout_sec=2
+            ), f"{gripper}: service unavailable"
+            gpe_supported = False
+
+        if gpe_supported:
+            req = MoveToAbsolutePositionGPE.Request()
+            print(MoveToAbsolutePositionGPE.Request())
+            req.position = 0.01
+            req.velocity = 0.01
+            assert hasattr(req, "use_gpe"), f"{gripper}: use_gpe expected but not found"
+            req.use_gpe = False
+        else:
+            req = MoveToAbsolutePosition.Request()
+            print(MoveToAbsolutePosition.Request())
+            req.position = 0.01
+            req.velocity = 0.01
+            assert not hasattr(
+                req, "use_gpe"
+            ), f"{gripper}: use_gpe not expected but found"
+
+        future = client.call_async(req)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=5)
+        assert future.result() is not None, f"{gripper}: no response from service"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+
+    node.destroy_node()
+    
+    
+@skip_without_gripper
 def test_driver_implements_grip_and_release(lifecycle_interface):
     driver = lifecycle_interface
 
@@ -253,13 +293,237 @@ def test_driver_implements_grip_and_release(lifecycle_interface):
     assert add_client.wait_for_service(timeout_sec=2)
     assert reset_client.wait_for_service(timeout_sec=2)
 
-    # Drop default modbus gripper because that can't grip in simulation.
+    reset_req = Trigger.Request()
+    future = reset_client.call_async(reset_req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    # Add TCP/IP gripper
+    add_req = AddGripper.Request()
+    add_req.gripper.host = "0.0.0.0"
+    add_req.gripper.port = 8000
+    future = add_client.call_async(add_req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    for gripper in driver.list_grippers():
+        grip_service_name = f"/schunk/driver/{gripper}/grip"
+        GripServiceType = driver.get_service_type(grip_service_name)
+        assert GripServiceType is not None, f"{gripper}: grip service not found"
+        grip_client = node.create_client(GripServiceType, grip_service_name)
+        assert grip_client.wait_for_service(
+            timeout_sec=5
+        ), f"{gripper}: grip service unavailable"
+
+        release_service_name = f"/schunk/driver/{gripper}/release"
+        ReleaseServiceType = driver.get_service_type(release_service_name)
+        assert ReleaseServiceType is not None, f"{gripper}: release service not found"
+        release_client = node.create_client(ReleaseServiceType, release_service_name)
+        assert release_client.wait_for_service(
+            timeout_sec=5
+        ), f"{gripper}: release service unavailable"
+
+        targets = [
+            {"force": 50, "use_gpe": False, "outward": False},
+            {"force": 100, "use_gpe": True, "outward": False},
+            {"force": 75, "use_gpe": False, "outward": True},
+            {"force": 88, "use_gpe": True, "outward": True},
+        ]
+
+        for target in targets:
+            # Grip
+            grip_req = GripServiceType.Request()
+            grip_req.force = target["force"]
+            grip_req.outward = target["outward"]
+            if hasattr(grip_req, "use_gpe"):
+                grip_req.use_gpe = target["use_gpe"]
+
+            future = grip_client.call_async(grip_req)
+            rclpy.spin_until_future_complete(node, future)
+            assert future.result().success, f"{gripper}: {future.result().message}"
+
+            # Release
+            release_req = ReleaseServiceType.Request()
+            future = release_client.call_async(release_req)
+            rclpy.spin_until_future_complete(node, future)
+            assert future.result().success, f"{gripper}: {future.result().message}"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+    node.destroy_node()
+
+
+@skip_without_gripper
+def test_driver_implements_grip_at_position_and_release(lifecycle_interface):
+    driver = lifecycle_interface
+
+    node = Node("check_grip_at_position")
+    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
+    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
+    assert add_client.wait_for_service(timeout_sec=2)
+    assert reset_client.wait_for_service(timeout_sec=2)
+
+    # Reset grippers (drop default modbus gripper)
+    reset_req = Trigger.Request()
+    future = reset_client.call_async(reset_req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    add_req = AddGripper.Request()
+    add_req.gripper.host = "0.0.0.0"
+    add_req.gripper.port = 8000
+    future = add_client.call_async(add_req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    for gripper in driver.list_grippers():
+        grip_service_name = f"/schunk/driver/{gripper}/grip_at_position"
+        GripServiceType = driver.get_service_type(grip_service_name)
+        assert (
+            GripServiceType is not None
+        ), f"{gripper}: grip_at_position service not found"
+        grip_client = node.create_client(GripServiceType, grip_service_name)
+        assert grip_client.wait_for_service(
+            timeout_sec=5
+        ), f"{gripper}: grip_at_position service unavailable"
+
+        release_service_name = f"/schunk/driver/{gripper}/release"
+        ReleaseServiceType = driver.get_service_type(release_service_name)
+        assert ReleaseServiceType is not None, f"{gripper}: release service not found"
+        release_client = node.create_client(ReleaseServiceType, release_service_name)
+        assert release_client.wait_for_service(
+            timeout_sec=5
+        ), f"{gripper}: release service unavailable"
+
+        targets = [
+            {"force": 50, "position": 10000, "use_gpe": False, "outward": False},
+            {"force": 100, "position": 20000, "use_gpe": True, "outward": False},
+            {"force": 75, "position": 15000, "use_gpe": False, "outward": True},
+            {"force": 88, "position": 12000, "use_gpe": True, "outward": True},
+        ]
+
+        for target in targets:
+            # Grip at position
+            grip_req = GripServiceType.Request()
+            grip_req.force = target["force"]
+            grip_req.at_position = target["position"]
+            grip_req.outward = target["outward"]
+            if hasattr(grip_req, "use_gpe"):
+                grip_req.use_gpe = target["use_gpe"]
+
+            future = grip_client.call_async(grip_req)
+            rclpy.spin_until_future_complete(node, future)
+            assert future.result().success, f"{gripper}: {future.result().message}"
+
+            # Release
+            release_req = ReleaseServiceType.Request()
+            future = release_client.call_async(release_req)
+            rclpy.spin_until_future_complete(node, future)
+            assert future.result().success, f"{gripper}: {future.result().message}"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+    node.destroy_node()
+
+
+@skip_without_gripper
+def test_driver_implements_grip_with_or_without_gpe(lifecycle_interface):
+    driver = lifecycle_interface
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    node = Node("grip_service_with_or_without_gpe")
+
+    for gripper in driver.list_grippers():
+        service_name = f"/schunk/driver/{gripper}/grip"
+
+        ServiceType = driver.get_service_type(service_name)
+        assert ServiceType is not None, f"{gripper}: service type not found"
+
+        client = node.create_client(ServiceType, service_name)
+        assert client.wait_for_service(
+            timeout_sec=10
+        ), f"{gripper}: service unavailable"
+
+        req = ServiceType.Request()
+        req.force = 100
+        req.outward = False
+
+        # If the service type supports use_gpe, set it
+        if hasattr(req, "use_gpe"):
+            req.use_gpe = False
+        else:
+            assert not hasattr(req, "use_gpe"), f"{gripper}: unexpected use_gpe field"
+
+        future = client.call_async(req)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=10)
+        assert future.result() is not None, f"{gripper}: no response from service"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+
+    node.destroy_node()
+
+
+@skip_without_gripper
+def test_driver_implements_grip_at_position_with_or_without_gpe(lifecycle_interface):
+    driver = lifecycle_interface
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    node = Node("grip_at_position_service_with_or_without_gpe")
+
+    for gripper in driver.list_grippers():
+        service_name = f"/schunk/driver/{gripper}/grip_at_position"
+
+        ServiceType = driver.get_service_type(service_name)
+        assert ServiceType is not None, f"{gripper}: service type not found"
+
+        client = node.create_client(ServiceType, service_name)
+        assert client.wait_for_service(timeout_sec=5), f"{gripper}: service unavailable"
+
+        req = ServiceType.Request()
+        req.force = 10
+        req.outward = False
+        req.at_position = 50
+
+        # If the service supports use_gpe, set it
+        if hasattr(req, "use_gpe"):
+            req.use_gpe = False
+        else:
+            assert not hasattr(req, "use_gpe"), f"{gripper}: unexpected use_gpe field"
+
+        future = client.call_async(req)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=5)
+        assert future.result() is not None, f"{gripper}: no response from service"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+
+    node.destroy_node()
+
+
+@skip_without_gripper
+def test_driver_implements_soft_grip_and_release(lifecycle_interface):
+    driver = lifecycle_interface
+
+    node = Node("check_soft_grip")
+    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
+    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
+    assert add_client.wait_for_service(timeout_sec=2)
+    assert reset_client.wait_for_service(timeout_sec=2)
+
     request = Trigger.Request()
     future = reset_client.call_async(request)
     rclpy.spin_until_future_complete(node, future)
     assert future.result().success
 
-    # Add TCP/IP gripper
     request = AddGripper.Request()
     request.gripper.host = "0.0.0.0"
     request.gripper.port = 8000
@@ -270,34 +534,146 @@ def test_driver_implements_grip_and_release(lifecycle_interface):
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
 
-    # Get the gripper's services
     for gripper in driver.list_grippers():
-        try:
-            grip_client = node.create_client(GripGPE, f"/schunk/driver/{gripper}/grip")
-        except (TypeError, NameError):
-            grip_client = node.create_client(Grip, f"/schunk/driver/{gripper}/grip")
-        assert grip_client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
+        if not gripper.startswith("EGK"):
+            driver.change_state(Transition.TRANSITION_DEACTIVATE)
+            driver.change_state(Transition.TRANSITION_CLEANUP)
+            node.destroy_node()
+            pytest.skip(f"Skipping non-EGK gripper: {gripper}")
+
+        service_name = f"/schunk/driver/{gripper}/soft_grip"
+        ServiceType = driver.get_service_type(service_name)
+        assert ServiceType is not None, f"{gripper}: service type not found"
+
+        client = node.create_client(ServiceType, service_name)
+        assert client.wait_for_service(timeout_sec=5), f"{gripper}: service unavailable"
 
         release_client = node.create_client(
-            Release,
-            f"/schunk/driver/{gripper}/release",
+            Release, f"/schunk/driver/{gripper}/release"
         )
-        assert release_client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
+        assert release_client.wait_for_service(
+            timeout_sec=2
+        ), f"{gripper}: release service unavailable"
 
         targets = [
-            {"force": 50, "use_gpe": False, "outward": False},
-            {"force": 100, "use_gpe": True, "outward": False},
-            {"force": 75, "use_gpe": False, "outward": True},
-            {"force": 88, "use_gpe": True, "outward": True},
+            {"force": 50, "velocity": 10000, "use_gpe": False, "outward": False},
+            {"force": 100, "velocity": 11000, "use_gpe": True, "outward": False},
+            {"force": 75, "velocity": 11000, "use_gpe": False, "outward": True},
+            {"force": 88, "velocity": 12000, "use_gpe": True, "outward": True},
         ]
-        for target in targets:
 
-            # Grip
-            request = grip_client.srv_type.Request()
+        for target in targets:
+            # Soft Grip
+            request = ServiceType.Request()
             request.force = target["force"]
+            request.velocity = target["velocity"]
+            request.outward = target["outward"]
             if hasattr(request, "use_gpe"):
                 request.use_gpe = target["use_gpe"]
+
+            future = client.call_async(request)
+            rclpy.spin_until_future_complete(node, future)
+            assert future.result().success, f"{future.result().message}"
+
+            # Release
+            future = release_client.call_async(Release.Request())
+            rclpy.spin_until_future_complete(node, future)
+            assert future.result().success, f"{future.result().message}"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+    node.destroy_node()
+
+
+@skip_without_gripper
+def test_driver_implements_soft_grip_at_position_and_release(lifecycle_interface):
+    driver = lifecycle_interface
+
+    node = Node("check_soft_grip_at_position")
+    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
+    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
+    assert add_client.wait_for_service(timeout_sec=2)
+    assert reset_client.wait_for_service(timeout_sec=2)
+
+    request = Trigger.Request()
+    future = reset_client.call_async(request)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    request = AddGripper.Request()
+    request.gripper.host = "0.0.0.0"
+    request.gripper.port = 8000
+    future = add_client.call_async(request)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    for gripper in driver.list_grippers():
+        if not gripper.startswith("EGK"):
+            driver.change_state(Transition.TRANSITION_DEACTIVATE)
+            driver.change_state(Transition.TRANSITION_CLEANUP)
+            node.destroy_node()
+            pytest.skip(f"Skipping non-EGK gripper: {gripper}")
+
+        service_name = f"/schunk/driver/{gripper}/soft_grip_at_position"
+        ServiceType = driver.get_service_type(service_name)
+        assert ServiceType is not None, f"{gripper}: service type not found"
+
+        grip_client = node.create_client(ServiceType, service_name)
+        assert grip_client.wait_for_service(
+            timeout_sec=5
+        ), f"{gripper}: service unavailable"
+
+        release_client = node.create_client(
+            Release, f"/schunk/driver/{gripper}/release"
+        )
+        assert release_client.wait_for_service(
+            timeout_sec=2
+        ), f"{gripper}: release service unavailable"
+
+        targets = [
+            {
+                "force": 50,
+                "position": 10000,
+                "velocity": 10000,
+                "use_gpe": False,
+                "outward": False,
+            },
+            {
+                "force": 100,
+                "position": 20000,
+                "velocity": 11000,
+                "use_gpe": True,
+                "outward": False,
+            },
+            {
+                "force": 75,
+                "position": 15000,
+                "velocity": 11000,
+                "use_gpe": False,
+                "outward": True,
+            },
+            {
+                "force": 88,
+                "position": 12000,
+                "velocity": 12000,
+                "use_gpe": True,
+                "outward": True,
+            },
+        ]
+
+        for target in targets:
+            # Soft Grip at position
+            request = ServiceType.Request()
+            request.force = target["force"]
+            request.velocity = target["velocity"]
+            request.at_position = target["position"]
             request.outward = target["outward"]
+            if hasattr(request, "use_gpe"):
+                request.use_gpe = target["use_gpe"]
+
             future = grip_client.call_async(request)
             rclpy.spin_until_future_complete(node, future)
             assert future.result().success, f"{future.result().message}"
@@ -309,7 +685,199 @@ def test_driver_implements_grip_and_release(lifecycle_interface):
 
     driver.change_state(Transition.TRANSITION_DEACTIVATE)
     driver.change_state(Transition.TRANSITION_CLEANUP)
+    node.destroy_node()
 
+
+@skip_without_gripper
+def test_driver_implements_soft_grip_with_or_without_gpe(lifecycle_interface):
+    driver = lifecycle_interface
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    node = Node("soft_grip_service_with_or_without_gpe")
+
+    for gripper in driver.list_grippers():
+        if not gripper.startswith("EGK"):
+            driver.change_state(Transition.TRANSITION_DEACTIVATE)
+            driver.change_state(Transition.TRANSITION_CLEANUP)
+            node.destroy_node()
+            pytest.skip(f"Skipping non-EGK gripper: {gripper}")
+
+        service_name = f"/schunk/driver/{gripper}/soft_grip"
+        ServiceType = driver.get_service_type(service_name)
+        assert ServiceType is not None, f"{gripper}: service type not found"
+
+        client = node.create_client(ServiceType, service_name)
+        assert client.wait_for_service(timeout_sec=5), f"{gripper}: service unavailable"
+
+        req = ServiceType.Request()
+        req.force = 20
+        req.velocity = 10000
+        req.outward = False
+        if hasattr(req, "use_gpe"):
+            req.use_gpe = False
+
+        future = client.call_async(req)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=5)
+        assert future.result() is not None, f"{gripper}: no response from service"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+    node.destroy_node()
+
+
+@skip_without_gripper
+def test_driver_implements_strong_grip_and_release(lifecycle_interface):
+    driver = lifecycle_interface
+
+    node = Node("check_strong_grip")
+    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
+    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
+    assert add_client.wait_for_service(timeout_sec=2)
+    assert reset_client.wait_for_service(timeout_sec=2)
+
+    request = Trigger.Request()
+    future = reset_client.call_async(request)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    request = AddGripper.Request()
+    request.gripper.host = "0.0.0.0"
+    request.gripper.port = 8000
+    future = add_client.call_async(request)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    for gripper in driver.list_grippers():
+        if not gripper.startswith("EGU") and not gripper.startswith("EZU"):
+            driver.change_state(Transition.TRANSITION_DEACTIVATE)
+            driver.change_state(Transition.TRANSITION_CLEANUP)
+            node.destroy_node()
+            pytest.skip(f"Skipping unsupported gripper: {gripper}")
+
+        service_name = f"/schunk/driver/{gripper}/strong_grip"
+        ServiceType = driver.get_service_type(service_name)
+        assert ServiceType is not None, f"{gripper}: service type not found"
+
+        grip_client = node.create_client(ServiceType, service_name)
+        assert grip_client.wait_for_service(
+            timeout_sec=5
+        ), f"{gripper}: service unavailable"
+
+        release_client = node.create_client(
+            Release, f"/schunk/driver/{gripper}/release"
+        )
+        assert release_client.wait_for_service(
+            timeout_sec=5
+        ), f"{gripper}: release service unavailable"
+
+        targets = [
+            {"force": 110, "use_gpe": True, "outward": False},
+            {"force": 130, "use_gpe": True, "outward": False},
+            {"force": 150, "use_gpe": True, "outward": True},
+            {"force": 200, "use_gpe": True, "outward": True},
+        ]
+
+        for target in targets:
+            request = grip_client.srv_type.Request()
+            request.force = target["force"]
+            if hasattr(request, "use_gpe"):
+                request.use_gpe = target["use_gpe"]
+            request.outward = target["outward"]
+
+            future = grip_client.call_async(request)
+            rclpy.spin_until_future_complete(node, future)
+            assert future.result().success, f"{future.result().message}"
+
+            # Release after StrongGrip
+            future = release_client.call_async(Release.Request())
+            rclpy.spin_until_future_complete(node, future)
+            assert future.result().success, f"{future.result().message}"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+    node.destroy_node()
+
+
+@skip_without_gripper
+def test_driver_implements_strong_grip_at_position_and_release(lifecycle_interface):
+    driver = lifecycle_interface
+
+    node = Node("check_strong_grip_at_position")
+    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
+    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
+    assert add_client.wait_for_service(timeout_sec=2)
+    assert reset_client.wait_for_service(timeout_sec=2)
+
+    request = Trigger.Request()
+    future = reset_client.call_async(request)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    request = AddGripper.Request()
+    request.gripper.host = "0.0.0.0"
+    request.gripper.port = 8000
+    future = add_client.call_async(request)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    for gripper in driver.list_grippers():
+        if not gripper.startswith("EGU") and not gripper.startswith("EGZ"):
+            driver.change_state(Transition.TRANSITION_DEACTIVATE)
+            driver.change_state(Transition.TRANSITION_CLEANUP)
+            node.destroy_node()
+            pytest.skip(f"Skipping unsupported gripper: {gripper}")
+
+        service_name = f"/schunk/driver/{gripper}/strong_grip_at_position"
+        ServiceType = driver.get_service_type(service_name)
+        assert ServiceType is not None, f"{gripper}: service type not found"
+
+        grip_client = node.create_client(ServiceType, service_name)
+        assert grip_client.wait_for_service(
+            timeout_sec=5
+        ), f"{gripper}: service unavailable"
+
+        release_client = node.create_client(
+            Release, f"/schunk/driver/{gripper}/release"
+        )
+        assert release_client.wait_for_service(
+            timeout_sec=5
+        ), f"{gripper}: release service unavailable"
+
+        targets = [
+            {"force": 120, "position": 10000, "use_gpe": True, "outward": False},
+            {"force": 150, "position": 20000, "use_gpe": True, "outward": False},
+            {"force": 180, "position": 15000, "use_gpe": True, "outward": True},
+            {"force": 200, "position": 12000, "use_gpe": True, "outward": True},
+        ]
+
+        for target in targets:
+            request = grip_client.srv_type.Request()
+            request.force = target["force"]
+            request.at_position = target["position"]
+            if hasattr(request, "use_gpe"):
+                request.use_gpe = target["use_gpe"]
+            request.outward = target["outward"]
+
+            future = grip_client.call_async(request)
+            rclpy.spin_until_future_complete(node, future)
+            assert future.result().success, f"{future.result().message}"
+
+            # Release after StrongGripAtPosition
+            future = release_client.call_async(Release.Request())
+            rclpy.spin_until_future_complete(node, future)
+            assert future.result().success, f"{future.result().message}"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+    node.destroy_node()
+   
 
 @skip_without_gripper
 def test_driver_implements_show_specification(lifecycle_interface):
@@ -405,609 +973,3 @@ def test_driver_implements_start_and_stop_jogging(lifecycle_interface):
 
             # stop
             future = stop_jogging_client.call_async(Trigger.Request())
-
-
-def test_driver_implements_grip_at_position_and_release(lifecycle_interface):
-    driver = lifecycle_interface
-
-    node = Node("check_grip_at_position")
-    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
-    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
-    assert add_client.wait_for_service(timeout_sec=2)
-    assert reset_client.wait_for_service(timeout_sec=2)
-
-    # Reset grippers (drop default modbus gripper)
-    request = Trigger.Request()
-    future = reset_client.call_async(request)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    # Add TCP/IP gripper
-    request = AddGripper.Request()
-    request.gripper.host = "0.0.0.0"
-    request.gripper.port = 8000
-    future = add_client.call_async(request)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    driver.change_state(Transition.TRANSITION_CONFIGURE)
-    driver.change_state(Transition.TRANSITION_ACTIVATE)
-
-    # Get gripper services
-    for gripper in driver.list_grippers():
-        try:
-            grip_client = node.create_client(
-                GripAtPositionGPE, f"/schunk/driver/{gripper}/grip_at_position"
-            )
-        except (TypeError, NameError):
-            grip_client = node.create_client(
-                GripAtPosition, f"/schunk/driver/{gripper}/grip_at_position"
-            )
-        assert grip_client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
-
-        release_client = node.create_client(
-            Release, f"/schunk/driver/{gripper}/release"
-        )
-        assert release_client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
-
-        targets = [
-            {"force": 50, "position": 10000, "use_gpe": False, "outward": False},
-            {"force": 100, "position": 20000, "use_gpe": True, "outward": False},
-            {"force": 75, "position": 15000, "use_gpe": False, "outward": True},
-            {"force": 88, "position": 12000, "use_gpe": True, "outward": True},
-        ]
-
-        for target in targets:
-            # Grip at position
-            request = grip_client.srv_type.Request()
-            request.force = target["force"]
-            request.at_position = target["position"]
-            if hasattr(request, "use_gpe"):
-                request.use_gpe = target["use_gpe"]
-            request.outward = target["outward"]
-
-            future = grip_client.call_async(request)
-            rclpy.spin_until_future_complete(node, future)
-            assert future.result().success, f"{future.result().message}"
-
-            # Release
-            future = release_client.call_async(Release.Request())
-            rclpy.spin_until_future_complete(node, future)
-            assert future.result().success, f"{future.result().message}"
-
-    driver.change_state(Transition.TRANSITION_DEACTIVATE)
-    driver.change_state(Transition.TRANSITION_CLEANUP)
-
-    node.destroy_node()
-
-
-@skip_without_gripper
-def test_driver_implements_soft_grip_and_release(lifecycle_interface):
-    driver = lifecycle_interface
-
-    node = Node("check_soft_grip")
-    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
-    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
-    assert add_client.wait_for_service(timeout_sec=2)
-    assert reset_client.wait_for_service(timeout_sec=2)
-
-    # Reset grippers (drop default modbus gripper)
-    request = Trigger.Request()
-    future = reset_client.call_async(request)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    # Add TCP/IP gripper
-    request = AddGripper.Request()
-    request.gripper.host = "0.0.0.0"
-    request.gripper.port = 8000
-    future = add_client.call_async(request)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    driver.change_state(Transition.TRANSITION_CONFIGURE)
-    driver.change_state(Transition.TRANSITION_ACTIVATE)
-
-    # Get gripper services
-    for gripper in driver.list_grippers():
-        if not gripper.startswith("EGK"):
-            driver.change_state(Transition.TRANSITION_DEACTIVATE)
-            driver.change_state(Transition.TRANSITION_CLEANUP)
-            node.destroy_node()
-            pytest.skip()
-        try:
-            grip_client = node.create_client(
-                SoftGripGPE, f"/schunk/driver/{gripper}/soft_grip"
-            )
-        except (TypeError, NameError):
-            grip_client = node.create_client(
-                SoftGrip, f"/schunk/driver/{gripper}/soft_grip"
-            )
-        assert grip_client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
-
-        release_client = node.create_client(
-            Release, f"/schunk/driver/{gripper}/release"
-        )
-        assert release_client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
-
-        targets = [
-            {"force": 50, "velocity": 10000, "use_gpe": False, "outward": False},
-            {"force": 100, "velocity": 11000, "use_gpe": True, "outward": False},
-            {"force": 75, "velocity": 11000, "use_gpe": False, "outward": True},
-            {"force": 88, "velocity": 12000, "use_gpe": True, "outward": True},
-        ]
-
-        for target in targets:
-            # Soft Grip
-            request = grip_client.srv_type.Request()
-            request.force = target["force"]
-            request.velocity = target["velocity"]
-            if hasattr(request, "use_gpe"):
-                request.use_gpe = target["use_gpe"]
-            request.outward = target["outward"]
-
-            future = grip_client.call_async(request)
-            rclpy.spin_until_future_complete(node, future)
-            assert future.result().success, f"{future.result().message}"
-
-            # Release
-            future = release_client.call_async(Release.Request())
-            rclpy.spin_until_future_complete(node, future)
-            assert future.result().success, f"{future.result().message}"
-
-    driver.change_state(Transition.TRANSITION_DEACTIVATE)
-    driver.change_state(Transition.TRANSITION_CLEANUP)
-    node.destroy_node()
-
-
-@skip_without_gripper
-def test_driver_implements_soft_grip_at_position_and_release(lifecycle_interface):
-    driver = lifecycle_interface
-
-    node = Node("check_soft_grip_at_position")
-    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
-    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
-    assert add_client.wait_for_service(timeout_sec=2)
-    assert reset_client.wait_for_service(timeout_sec=2)
-
-    # Reset grippers (drop default modbus gripper)
-    request = Trigger.Request()
-    future = reset_client.call_async(request)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    # Add TCP/IP gripper
-    request = AddGripper.Request()
-    request.gripper.host = "0.0.0.0"
-    request.gripper.port = 8000
-    future = add_client.call_async(request)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    driver.change_state(Transition.TRANSITION_CONFIGURE)
-    driver.change_state(Transition.TRANSITION_ACTIVATE)
-
-    # Get gripper services
-    for gripper in driver.list_grippers():
-        if not gripper.startswith("EGK"):
-            driver.change_state(Transition.TRANSITION_DEACTIVATE)
-            driver.change_state(Transition.TRANSITION_CLEANUP)
-            node.destroy_node()
-            pytest.skip()
-        try:
-            grip_client = node.create_client(
-                SoftGripAtPositionGPE, f"/schunk/driver/{gripper}/soft_grip_at_position"
-            )
-        except (TypeError, NameError):
-            grip_client = node.create_client(
-                SoftGripAtPosition, f"/schunk/driver/{gripper}/soft_grip_at_position"
-            )
-        assert grip_client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
-
-        release_client = node.create_client(
-            Release, f"/schunk/driver/{gripper}/release"
-        )
-        assert release_client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
-
-        targets = [
-            {
-                "force": 50,
-                "position": 10000,
-                "velocity": 10000,
-                "use_gpe": False,
-                "outward": False,
-            },
-            {
-                "force": 100,
-                "position": 20000,
-                "velocity": 11000,
-                "use_gpe": True,
-                "outward": False,
-            },
-            {
-                "force": 75,
-                "position": 15000,
-                "velocity": 11000,
-                "use_gpe": False,
-                "outward": True,
-            },
-            {
-                "force": 88,
-                "position": 12000,
-                "velocity": 12000,
-                "use_gpe": True,
-                "outward": True,
-            },
-        ]
-
-        for target in targets:
-            # Soft Grip at position
-            request = grip_client.srv_type.Request()
-            request.force = target["force"]
-            request.velocity = target["velocity"]
-            request.at_position = target["position"]
-            if hasattr(request, "use_gpe"):
-                request.use_gpe = target["use_gpe"]
-            request.outward = target["outward"]
-
-            future = grip_client.call_async(request)
-            rclpy.spin_until_future_complete(node, future)
-            assert future.result().success, f"{future.result().message}"
-
-            # Release
-            future = release_client.call_async(Release.Request())
-            rclpy.spin_until_future_complete(node, future)
-            assert future.result().success, f"{future.result().message}"
-
-    driver.change_state(Transition.TRANSITION_DEACTIVATE)
-    driver.change_state(Transition.TRANSITION_CLEANUP)
-    node.destroy_node()
-
-
-@skip_without_gripper
-def test_driver_implements_strong_grip_and_release(lifecycle_interface):
-    driver = lifecycle_interface
-
-    node = Node("check_strong_grip")
-    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
-    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
-    assert add_client.wait_for_service(timeout_sec=2)
-    assert reset_client.wait_for_service(timeout_sec=2)
-
-    # Reset grippers
-    request = Trigger.Request()
-    future = reset_client.call_async(request)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    # Add TCP/IP gripper
-    request = AddGripper.Request()
-    request.gripper.host = "0.0.0.0"
-    request.gripper.port = 8000
-    future = add_client.call_async(request)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    driver.change_state(Transition.TRANSITION_CONFIGURE)
-    driver.change_state(Transition.TRANSITION_ACTIVATE)
-
-    # Only run for grippers that support StrongGrip
-    for gripper in driver.list_grippers():
-        if not gripper.startswith("EGU") and not gripper.startswith("EZU"):
-            driver.change_state(Transition.TRANSITION_DEACTIVATE)
-            driver.change_state(Transition.TRANSITION_CLEANUP)
-            node.destroy_node()
-            pytest.skip()
-        grip_client = node.create_client(
-            StrongGripGPE, f"/schunk/driver/{gripper}/strong_grip"
-        )
-        assert grip_client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
-
-        release_client = node.create_client(
-            Release, f"/schunk/driver/{gripper}/release"
-        )
-        assert release_client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
-
-        # StrongGrip test targets
-        targets = [
-            {"force": 110, "use_gpe": True, "outward": False},
-            {"force": 130, "use_gpe": True, "outward": False},
-            {"force": 150, "use_gpe": True, "outward": True},
-            {"force": 200, "use_gpe": True, "outward": True},
-        ]
-
-        for target in targets:
-            request = grip_client.srv_type.Request()
-            request.force = target["force"]
-            if hasattr(request, "use_gpe"):
-                request.use_gpe = target["use_gpe"]
-            request.outward = target["outward"]
-
-            future = grip_client.call_async(request)
-            rclpy.spin_until_future_complete(node, future)
-            assert future.result().success, f"{future.result().message}"
-
-            # Release after StrongGrip
-            future = release_client.call_async(Release.Request())
-            rclpy.spin_until_future_complete(node, future)
-            assert future.result().success, f"{future.result().message}"
-
-    driver.change_state(Transition.TRANSITION_DEACTIVATE)
-    driver.change_state(Transition.TRANSITION_CLEANUP)
-    node.destroy_node()
-
-
-@skip_without_gripper
-def test_driver_implements_strong_grip_at_position_and_release(lifecycle_interface):
-    driver = lifecycle_interface
-
-    node = Node("check_strong_grip_at_position")
-    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
-    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
-    assert add_client.wait_for_service(timeout_sec=2)
-    assert reset_client.wait_for_service(timeout_sec=2)
-
-    # Reset grippers
-    request = Trigger.Request()
-    future = reset_client.call_async(request)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    # Add TCP/IP gripper
-    request = AddGripper.Request()
-    request.gripper.host = "0.0.0.0"
-    request.gripper.port = 8000
-    future = add_client.call_async(request)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    driver.change_state(Transition.TRANSITION_CONFIGURE)
-    driver.change_state(Transition.TRANSITION_ACTIVATE)
-
-    # Only run for grippers that support StrongGrip
-    for gripper in driver.list_grippers():
-        if not gripper.startswith("EGU") and not gripper.startswith("EGZ"):
-            driver.change_state(Transition.TRANSITION_DEACTIVATE)
-            driver.change_state(Transition.TRANSITION_CLEANUP)
-            node.destroy_node()
-            pytest.skip()
-
-        grip_client = node.create_client(
-            StrongGripAtPositionGPE, f"/schunk/driver/{gripper}/strong_grip_at_position"
-        )
-        assert grip_client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
-
-        release_client = node.create_client(
-            Release, f"/schunk/driver/{gripper}/release"
-        )
-        assert release_client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
-
-        # StrongGripAtPosition test targets
-        targets = [
-            {"force": 120, "position": 10000, "use_gpe": True, "outward": False},
-            {"force": 150, "position": 20000, "use_gpe": True, "outward": False},
-            {"force": 180, "position": 15000, "use_gpe": True, "outward": True},
-            {"force": 200, "position": 12000, "use_gpe": True, "outward": True},
-        ]
-
-        for target in targets:
-            request = grip_client.srv_type.Request()
-            request.force = target["force"]
-            request.at_position = target["position"]
-            if hasattr(request, "use_gpe"):
-                request.use_gpe = target["use_gpe"]
-            request.outward = target["outward"]
-
-            future = grip_client.call_async(request)
-            rclpy.spin_until_future_complete(node, future)
-            assert future.result().success, f"{future.result().message}"
-
-            # Release after StrongGripAtPosition
-            future = release_client.call_async(Release.Request())
-            rclpy.spin_until_future_complete(node, future)
-            assert future.result().success, f"{future.result().message}"
-
-    driver.change_state(Transition.TRANSITION_DEACTIVATE)
-    driver.change_state(Transition.TRANSITION_CLEANUP)
-    node.destroy_node()
-
-
-@skip_without_gripper
-def test_driver_implements_move_to_absolute_position_with_or_without_gpe(
-    lifecycle_interface,
-):
-    driver = lifecycle_interface
-    driver.change_state(Transition.TRANSITION_CONFIGURE)
-    driver.change_state(Transition.TRANSITION_ACTIVATE)
-
-    node = Node("move_to_absolute_position_service_with_or_without_gpe")
-
-    for gripper in driver.list_grippers():
-        service_name = f"/schunk/driver/{gripper}/move_to_absolute_position"
-
-        client = node.create_client(MoveToAbsolutePositionGPE, service_name)
-        if client.wait_for_service(timeout_sec=1.0):
-            gpe_supported = True
-        else:
-            client.destroy()
-            client = node.create_client(MoveToAbsolutePosition, service_name)
-            assert client.wait_for_service(
-                timeout_sec=2
-            ), f"{gripper}: service unavailable"
-            gpe_supported = False
-
-        if gpe_supported:
-            req = MoveToAbsolutePositionGPE.Request()
-            print(MoveToAbsolutePositionGPE.Request())
-            req.position = 0.01
-            req.velocity = 0.01
-            assert hasattr(req, "use_gpe"), f"{gripper}: use_gpe expected but not found"
-            req.use_gpe = False
-        else:
-            req = MoveToAbsolutePosition.Request()
-            print(MoveToAbsolutePosition.Request())
-            req.position = 0.01
-            req.velocity = 0.01
-            assert not hasattr(
-                req, "use_gpe"
-            ), f"{gripper}: use_gpe not expected but found"
-
-        future = client.call_async(req)
-        rclpy.spin_until_future_complete(node, future, timeout_sec=5)
-        assert future.result() is not None, f"{gripper}: no response from service"
-
-    driver.change_state(Transition.TRANSITION_DEACTIVATE)
-    driver.change_state(Transition.TRANSITION_CLEANUP)
-
-    node.destroy_node()
-
-
-@skip_without_gripper
-def test_driver_implements_grip_with_or_without_gpe(lifecycle_interface):
-    driver = lifecycle_interface
-    driver.change_state(Transition.TRANSITION_CONFIGURE)
-    driver.change_state(Transition.TRANSITION_ACTIVATE)
-
-    node = Node("grip_service_with_or_without_gpe")
-
-    for gripper in driver.list_grippers():
-        service_name = f"/schunk/driver/{gripper}/grip"
-
-        client = node.create_client(GripGPE, service_name)
-        if client.wait_for_service(timeout_sec=1.0):
-            gpe_supported = True
-        else:
-            client.destroy()
-            client = node.create_client(Grip, service_name)
-            assert client.wait_for_service(
-                timeout_sec=2
-            ), f"{gripper}: service unavailable"
-            gpe_supported = False
-
-        if gpe_supported:
-            req = GripGPE.Request()
-            print(GripGPE.Request())
-            req.force = 10
-            req.outward = False
-            assert hasattr(req, "use_gpe"), f"{gripper}: use_gpe expected but not found"
-            req.use_gpe = False
-        else:
-            req = Grip.Request()
-            print(Grip.Request())
-            req.force = 10
-            req.outward = False
-            assert not hasattr(
-                req, "use_gpe"
-            ), f"{gripper}: use_gpe not expected but found"
-
-        future = client.call_async(req)
-        rclpy.spin_until_future_complete(node, future, timeout_sec=5)
-        assert future.result() is not None, f"{gripper}: no response from service"
-
-    driver.change_state(Transition.TRANSITION_DEACTIVATE)
-    driver.change_state(Transition.TRANSITION_CLEANUP)
-
-    node.destroy_node()
-
-
-@skip_without_gripper
-def test_driver_implements_grip_at_position_with_or_without_gpe(lifecycle_interface):
-    driver = lifecycle_interface
-    driver.change_state(Transition.TRANSITION_CONFIGURE)
-    driver.change_state(Transition.TRANSITION_ACTIVATE)
-
-    node = Node("grip_at_position_service_with_or_without_gpe")
-
-    for gripper in driver.list_grippers():
-        service_name = f"/schunk/driver/{gripper}/grip_at_position"
-
-        client = node.create_client(GripAtPositionGPE, service_name)
-        if client.wait_for_service(timeout_sec=1.0):
-            gpe_supported = True
-        else:
-            client.destroy()
-            client = node.create_client(GripAtPosition, service_name)
-            assert client.wait_for_service(
-                timeout_sec=2
-            ), f"{gripper}: service unavailable"
-            gpe_supported = False
-
-        if gpe_supported:
-            req = GripAtPositionGPE.Request()
-            print(GripAtPositionGPE.Request())
-            req.force = 10
-            req.outward = False
-            req.at_position = 50
-        else:
-            req = GripAtPosition.Request()
-            print(GripAtPosition.Request())
-            req.force = 10
-            req.outward = False
-            req.at_position = 50
-
-        future = client.call_async(req)
-        rclpy.spin_until_future_complete(node, future, timeout_sec=5)
-        assert future.result() is not None, f"{gripper}: no response from service"
-
-    driver.change_state(Transition.TRANSITION_DEACTIVATE)
-    driver.change_state(Transition.TRANSITION_CLEANUP)
-
-    node.destroy_node()
-
-
-@skip_without_gripper
-def test_driver_implements_soft_grip_with_or_without_gpe(lifecycle_interface):
-    driver = lifecycle_interface
-    driver.change_state(Transition.TRANSITION_CONFIGURE)
-    driver.change_state(Transition.TRANSITION_ACTIVATE)
-
-    node = Node("soft_grip_service_with_or_without_gpe")
-
-    for gripper in driver.list_grippers():
-        if not gripper.startswith("EGK"):
-            driver.change_state(Transition.TRANSITION_DEACTIVATE)
-            driver.change_state(Transition.TRANSITION_CLEANUP)
-            node.destroy_node()
-            pytest.skip()
-        service_name = f"/schunk/driver/{gripper}/soft_grip"
-
-        # Try GPE variant first
-        client = node.create_client(SoftGripGPE, service_name)
-        if client.wait_for_service(timeout_sec=1.0):
-            gpe_supported = True
-        else:
-            client.destroy()
-            client = node.create_client(SoftGrip, service_name)
-            assert client.wait_for_service(
-                timeout_sec=2
-            ), f"{gripper}: service unavailable"
-            gpe_supported = False
-
-        # Prepare request
-        if gpe_supported:
-            req = SoftGripGPE.Request()
-            print(SoftGripGPE.Request())
-            req.force = 20
-            req.velocity = 10000
-            req.outward = False
-            assert hasattr(req, "use_gpe"), f"{gripper}: use_gpe expected but not found"
-            req.use_gpe = False
-        else:
-            req = SoftGrip.Request()
-            print(SoftGrip.Request())
-            req.force = 20
-            req.velocity = 10000
-            req.outward = False
-            assert not hasattr(
-                req, "use_gpe"
-            ), f"{gripper}: use_gpe not expected but found"
-
-        # Call service
-        future = client.call_async(req)
-        rclpy.spin_until_future_complete(node, future, timeout_sec=5)
-        assert future.result() is not None, f"{gripper}: no response from service"
-
-    driver.change_state(Transition.TRANSITION_DEACTIVATE)
-    driver.change_state(Transition.TRANSITION_CLEANUP)
-
-    node.destroy_node()
