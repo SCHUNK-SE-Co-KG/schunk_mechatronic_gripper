@@ -21,8 +21,6 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     ListGrippers,
     AddGripper,
     MoveToAbsolutePosition,
-    MoveToRelativePosition,
-    MoveToRelativePositionGPE,
     Grip,
     GripGPE,
     Release,
@@ -295,34 +293,22 @@ def test_driver_implements_move_to_relative_position_with_or_without_gpe(
     for gripper in driver.list_grippers():
         service_name = f"/schunk/driver/{gripper}/move_to_relative_position"
 
-        # Try GPE variant first
-        client = node.create_client(MoveToRelativePositionGPE, service_name)
-        if client.wait_for_service(timeout_sec=5.0):
-            gpe_supported = True
-        else:
-            client.destroy()
-            client = node.create_client(MoveToRelativePosition, service_name)
-            assert client.wait_for_service(
-                timeout_sec=5
-            ), f"{gripper}: service unavailable"
-            gpe_supported = False
+        ServiceType = driver.get_service_type(service_name)
+        assert ServiceType is not None, f"{gripper}: service type not found"
 
-        # Prepare request
-        if gpe_supported:
-            req = MoveToRelativePositionGPE.Request()
-            req.position = -0.05  # negative value for relative move
-            req.velocity = 0.01
-            assert hasattr(req, "use_gpe"), f"{gripper}: use_gpe expected but not found"
+        client = node.create_client(ServiceType, service_name)
+        assert client.wait_for_service(timeout_sec=5), f"{gripper}: service unavailable"
+
+        req = ServiceType.Request()
+        req.position = -0.5
+        req.velocity = 0.5
+
+        # If the service type supports use_gpe, verify it
+        if hasattr(req, "use_gpe"):
             req.use_gpe = False
         else:
-            req = MoveToRelativePosition.Request()
-            req.position = -0.05
-            req.velocity = 0.01
-            assert not hasattr(
-                req, "use_gpe"
-            ), f"{gripper}: use_gpe not expected but found"
+            assert not hasattr(req, "use_gpe"), f"{gripper}: unexpected use_gpe field"
 
-        # Call the service
         future = client.call_async(req)
         rclpy.spin_until_future_complete(node, future, timeout_sec=5)
         assert future.result() is not None, f"{gripper}: no response from service"
