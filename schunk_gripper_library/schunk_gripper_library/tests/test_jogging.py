@@ -73,3 +73,21 @@ def test_driver_allows_repeatedly_calling_jogging_methods():
         assert driver.stop_jogging()
 
     driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_doesnt_start_jogging_with_warnings():
+
+    # This should cover when jogging into the gripper's limits
+    # and when being outside the permissible velocities.
+
+    driver = Driver()
+
+    assert driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
+
+    invalid_velocity = driver.module_parameters["max_grp_vel"] + 100
+    assert not driver.start_jogging(
+        velocity=invalid_velocity
+    ), f"diagnostics: {driver.get_status_diagnostics()}"
+
+    driver.disconnect()

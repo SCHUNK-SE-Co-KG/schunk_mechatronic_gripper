@@ -508,7 +508,7 @@ class Driver(object):
                 self.set_control_bit(bit=31, value=self.gpe_available())
 
             self.send_plc_output()
-            desired_bits = {"5": cmd_toggle_before ^ 1}
+            desired_bits = {"5": cmd_toggle_before ^ 1, "6": 0}
             return self.wait_for_status(bits=desired_bits)
 
         if scheduler:
