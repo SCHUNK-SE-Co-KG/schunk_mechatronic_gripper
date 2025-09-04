@@ -22,6 +22,8 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     MoveToAbsolutePosition,
     Grip,
     Release,
+    StartJogging,
+    StartJoggingGPE,
     ShowGripperSpecification,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
@@ -329,6 +331,33 @@ def test_driver_offers_callback_for_release(ros2: None):
         driver._release_cb(request=req, response=res, gripper=gripper)
         assert not res.success
         assert res.message != ""
+
+    driver.on_deactivate(state=None)
+    driver.on_cleanup(state=None)
+
+
+@skip_without_gripper
+def test_driver_offers_callbacks_for_start_and_stop_jogging(ros2: None):
+    driver = Driver("driver")
+    driver.on_configure(state=None)
+    driver.on_activate(state=None)
+
+    requests = [StartJogging.Request(), StartJoggingGPE.Request()]
+    responses = [StartJogging.Response(), StartJoggingGPE.Response()]
+
+    # Check if we can call the interface.
+    for req, res in zip(requests, responses):
+        for idx, _ in enumerate(driver.grippers):
+
+            # Start
+            gripper = driver.grippers[idx]
+            req.velocity = 42.0
+            driver._start_jogging_cb(request=req, response=res, gripper=gripper)
+
+            # Stop
+            req = Trigger.Request()
+            res = Trigger.Response()
+            driver._stop_jogging_cb(request=req, response=res, gripper=gripper)
 
     driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)

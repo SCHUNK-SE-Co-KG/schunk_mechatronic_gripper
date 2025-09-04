@@ -487,6 +487,58 @@ class Driver(object):
             return abs(still_to_go) / (ratio * self.module_parameters["max_grp_vel"])
         return 0.0
 
+    def start_jogging(
+        self, velocity: int, use_gpe: bool = False, scheduler: Scheduler | None = None
+    ) -> bool:
+        if not self.connected:
+            return False
+
+        def do() -> bool:
+            still_jogging = False
+            if self.get_control_bit(bit=8) == 1 or self.get_control_bit(bit=9) == 1:
+                still_jogging = True
+
+            self.clear_plc_output()
+            self.send_plc_output()
+            cmd_toggle_before = self.get_status_bit(bit=5)
+
+            if not self.set_target_speed(abs(velocity)):
+                return False
+            if velocity >= 0:
+                self.set_control_bit(bit=9, value=True)
+            else:
+                self.set_control_bit(bit=8, value=True)
+            if use_gpe:
+                self.set_control_bit(bit=31, value=self.gpe_available())
+            self.send_plc_output()
+
+            if still_jogging:
+                self.receive_plc_input()
+                if self.get_status_bit(bit=6) == 0:
+                    return True
+
+            desired_bits = {"5": cmd_toggle_before ^ 1, "6": 0}
+            return self.wait_for_status(bits=desired_bits)
+
+        if scheduler:
+            return scheduler.execute(func=partial(do)).result()
+        else:
+            return do()
+
+    def stop_jogging(self, scheduler: Scheduler | None = None) -> bool:
+        if not self.connected:
+            return False
+
+        def do() -> bool:
+            self.clear_plc_output()
+            self.send_plc_output()
+            return True
+
+        if scheduler:
+            return scheduler.execute(func=partial(do)).result()
+        else:
+            return do()
+
     def receive_plc_input(self) -> bool:
         with self.input_buffer_lock:
             data = self.read_module_parameter(self.plc_input)
