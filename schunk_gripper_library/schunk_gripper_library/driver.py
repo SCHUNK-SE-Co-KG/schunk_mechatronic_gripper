@@ -494,13 +494,9 @@ class Driver(object):
             return False
 
         def do() -> bool:
-            already_jogging = (
-                True
-                if (
-                    self.get_control_bit(bit=8) == 1 or self.get_control_bit(bit=9) == 1
-                )
-                else False
-            )
+            still_jogging = False
+            if self.get_control_bit(bit=8) == 1 or self.get_control_bit(bit=9) == 1:
+                still_jogging = True
 
             self.clear_plc_output()
             self.send_plc_output()
@@ -514,10 +510,12 @@ class Driver(object):
                 self.set_control_bit(bit=8, value=True)
             if use_gpe:
                 self.set_control_bit(bit=31, value=self.gpe_available())
-
             self.send_plc_output()
-            if already_jogging:
-                return True
+
+            if still_jogging:
+                self.receive_plc_input()
+                if self.get_status_bit(bit=6) == 0:
+                    return True
 
             desired_bits = {"5": cmd_toggle_before ^ 1, "6": 0}
             return self.wait_for_status(bits=desired_bits)
