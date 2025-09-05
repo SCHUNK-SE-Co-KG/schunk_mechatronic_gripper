@@ -25,6 +25,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     AddGripper,
     MoveToAbsolutePosition,
     Grip,
+    GripGPE,
     Release,
     StartJogging,
     StartJoggingGPE,
@@ -421,14 +422,20 @@ class Driver(Node):
                     callback_group=self.gripper_services_cb_group,
                 )
             )
-            self.gripper_services.append(
-                self.create_service(
-                    Grip,
-                    f"~/{gripper_id}/grip",
-                    partial(self._grip_cb, gripper=gripper),
-                    callback_group=self.gripper_services_cb_group,
+            if gripper["driver"].gpe_available():
+                service_types = [GripGPE]
+            else:
+                service_types = [Grip]
+            service_names = ["grip"]
+            for srv_name, srv_type in zip(service_names, service_types):
+                self.gripper_services.append(
+                    self.create_service(
+                        srv_type,
+                        f"~/{gripper_id}/{srv_name}",
+                        partial(self._grip_cb, gripper=gripper),
+                        callback_group=self.gripper_services_cb_group,
+                    )
                 )
-            )
             self.gripper_services.append(
                 self.create_service(
                     Release,
@@ -840,22 +847,24 @@ class Driver(Node):
 
     def _grip_cb(
         self,
-        request: Grip.Request,
-        response: Grip.Response,
+        request,
+        response,
         gripper: Gripper,
     ):
         self.get_logger().debug("---> Grip")
+        use_gpe = getattr(request, "use_gpe", False)
+
         if self.needs_synchronize(gripper):
             response.success = gripper["driver"].grip(
                 force=request.force,
-                use_gpe=request.use_gpe,
+                use_gpe=use_gpe,
                 outward=request.outward,
                 scheduler=self.scheduler,
             )
         else:
             response.success = gripper["driver"].grip(
                 force=request.force,
-                use_gpe=request.use_gpe,
+                use_gpe=use_gpe,
                 outward=request.outward,
             )
         response.message = gripper["driver"].get_status_diagnostics()
