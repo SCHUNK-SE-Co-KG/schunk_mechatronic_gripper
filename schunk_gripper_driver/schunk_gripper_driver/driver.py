@@ -53,6 +53,7 @@ import tempfile
 import json
 from collections import OrderedDict
 import time
+from typing import Any
 
 
 class Gripper(TypedDict):
@@ -847,8 +848,8 @@ class Driver(Node):
 
     def _grip_cb(
         self,
-        request,
-        response,
+        request: Any,
+        response: Any,
         gripper: Gripper,
     ):
         self.get_logger().debug("---> Grip")
