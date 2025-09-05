@@ -381,6 +381,44 @@ def test_driver_implements_grip_at_position_and_release(lifecycle_interface):
 
 
 @skip_without_gripper
+def test_driver_implements_grip_at_position_with_or_without_gpe(lifecycle_interface):
+    driver = lifecycle_interface
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    node = Node("grip_at_position_service_with_or_without_gpe")
+
+    for gripper in driver.list_grippers():
+        service_name = f"/schunk/driver/{gripper}/grip_at_position"
+
+        ServiceType = driver.get_service_type(service_name)
+        assert ServiceType is not None, f"{gripper}: service type not found"
+
+        client = node.create_client(ServiceType, service_name)
+        assert client.wait_for_service(timeout_sec=5), f"{gripper}: service unavailable"
+
+        req = ServiceType.Request()
+        req.force = 100
+        req.outward = False
+        req.at_position = 50
+
+        # If the service supports use_gpe, set it
+        if hasattr(req, "use_gpe"):
+            req.use_gpe = False
+        else:
+            assert not hasattr(req, "use_gpe"), f"{gripper}: unexpected use_gpe field"
+
+        future = client.call_async(req)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=5)
+        assert future.result() is not None, f"{gripper}: no response from service"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+
+    node.destroy_node()
+
+
+@skip_without_gripper
 def test_driver_implements_show_specification(lifecycle_interface):
     driver = lifecycle_interface
     driver.change_state(Transition.TRANSITION_CONFIGURE)
