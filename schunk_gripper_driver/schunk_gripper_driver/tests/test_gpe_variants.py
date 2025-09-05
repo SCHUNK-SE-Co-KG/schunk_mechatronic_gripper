@@ -15,14 +15,14 @@
 # --------------------------------------------------------------------------------
 
 from schunk_gripper_driver.driver import Driver
+from schunk_gripper_library.utility import skip_without_gripper
 from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     Grip,
     GripGPE,
 )
 
-# Check if we can call all driver callbacks that support non-GPE and GPE variants.
 
-
+@skip_without_gripper
 def test_grip_callback_handles_all_gpe_variants(ros2):
     driver = Driver("driver")
     driver.on_configure(state=None)
@@ -40,5 +40,31 @@ def test_grip_callback_handles_all_gpe_variants(ros2):
             request=GripGPE.Request(), response=GripGPE.Response(), gripper=gripper
         )
 
+        # More grip versions here ..
+
     driver.on_deactivate(state=None)
+    driver.on_cleanup(state=None)
+
+
+@skip_without_gripper
+def test_driver_offers_gpe_specific_grip_services(ros2):
+    driver = Driver("driver")
+    driver.on_configure(state=None)
+
+    # Mimic modules with and without GPE and check
+    # if the driver creates the expected services
+
+    modules = ["EGU_50_M_B", "EGK_25_N_B"]
+    expected_types = [GripGPE, Grip]
+
+    for module, srv_type in zip(modules, expected_types):
+        driver.grippers[0]["driver"].module = module
+        driver.on_activate(state=None)
+
+        for service in driver.gripper_services:
+            if service.srv_name.endswith("/grip"):
+                assert service.srv_type == srv_type
+
+        driver.on_deactivate(state=None)
+
     driver.on_cleanup(state=None)
