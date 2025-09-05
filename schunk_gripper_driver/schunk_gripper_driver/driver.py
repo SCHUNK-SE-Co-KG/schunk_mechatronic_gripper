@@ -854,20 +854,13 @@ class Driver(Node):
     ):
         self.get_logger().debug("---> Grip")
         use_gpe = getattr(request, "use_gpe", False)
-
-        if self.needs_synchronize(gripper):
-            response.success = gripper["driver"].grip(
-                force=request.force,
-                use_gpe=use_gpe,
-                outward=request.outward,
-                scheduler=self.scheduler,
-            )
-        else:
-            response.success = gripper["driver"].grip(
-                force=request.force,
-                use_gpe=use_gpe,
-                outward=request.outward,
-            )
+        scheduler = self.scheduler if self.needs_synchronize(gripper) else None
+        response.success = gripper["driver"].grip(
+            force=request.force,
+            use_gpe=use_gpe,
+            outward=request.outward,
+            scheduler=scheduler,
+        )
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
