@@ -472,8 +472,8 @@ def test_driver_estimates_duration_of_release():
 @skip_without_gripper
 def test_driver_estimates_duration_of_grip_at_position():
     driver = Driver()
-
     driver.connect(serial_port="/dev/ttyUSB0", device_id=12, update_cycle=None)
+
     max_pos = driver.module_parameters["max_pos"]
     min_pos = driver.module_parameters["min_pos"]
     mid_pos = (min_pos + max_pos) // 2
@@ -481,18 +481,24 @@ def test_driver_estimates_duration_of_grip_at_position():
     def set_actual_position(position: int) -> None:
         driver.plc_input_buffer[4:8] = bytes(struct.pack("i", position))
 
-    positions = [min_pos, min_pos + 500, mid_pos, mid_pos + 500, max_pos, max_pos - 500]
+    # Fix position, vary force
+    set_actual_position(min_pos)
     forces = [50, 75, 100]
+    durations = []
+    for force in forces:
+        duration = driver.estimate_duration(position_abs=mid_pos, force=force)
+        durations.append(duration)
+    assert durations[0] > durations[1] > durations[2]
 
-    for pos in positions:
-        # Start near to mid_position
-        set_actual_position(mid_pos - 1000)
-        durations = []
-        for force in forces:
-            duration = driver.estimate_duration(position_abs=pos, force=force)
-            durations.append(duration)
-
-        assert durations[0] > durations[1] > durations[2]
+    # Fix force, vary position
+    fixed_force = 75
+    positions = [min_pos + 1000, mid_pos, max_pos]
+    durations = []
+    for position in positions:
+        set_actual_position(min_pos)
+        duration = driver.estimate_duration(position_abs=position, force=fixed_force)
+        durations.append(duration)
+    assert durations[0] < durations[1] < durations[2]
 
     # Cleanup
     driver.disconnect()
