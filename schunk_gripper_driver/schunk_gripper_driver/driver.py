@@ -858,6 +858,9 @@ class Driver(Node):
         use_gpe = getattr(request, "use_gpe", False)
         scheduler = self.scheduler if self.needs_synchronize(gripper) else None
         at_position = getattr(request, "at_position", None)
+        if at_position is not None:
+            at_position = int(at_position * 1e6)
+
         response.success = gripper["driver"].grip(
             position=at_position,
             force=request.force,

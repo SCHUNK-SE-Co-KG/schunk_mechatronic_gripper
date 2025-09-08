@@ -350,10 +350,10 @@ def test_driver_implements_grip_at_position_and_release(lifecycle_interface):
         ), f"{gripper}: release service unavailable"
 
         targets = [
-            {"force": 50, "position": 10000, "use_gpe": False, "outward": False},
-            {"force": 100, "position": 20000, "use_gpe": True, "outward": False},
-            {"force": 75, "position": 15000, "use_gpe": False, "outward": True},
-            {"force": 88, "position": 12000, "use_gpe": True, "outward": True},
+            {"force": 50, "position": 0.01, "use_gpe": False, "outward": False},
+            {"force": 100, "position": 0.02, "use_gpe": True, "outward": False},
+            {"force": 75, "position": 0.015, "use_gpe": False, "outward": True},
+            {"force": 88, "position": 0.012, "use_gpe": True, "outward": True},
         ]
 
         for target in targets:
