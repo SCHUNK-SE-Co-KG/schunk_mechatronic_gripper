@@ -305,7 +305,7 @@ def test_driver_implements_grip_and_release(lifecycle_interface):
 
 
 @skip_without_gripper
-def test_driver_implements_grip_at_position_and_release(lifecycle_interface):
+def test_driver_implements_grip_at_position(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("check_grip_at_position")
@@ -341,14 +341,6 @@ def test_driver_implements_grip_at_position_and_release(lifecycle_interface):
             timeout_sec=5
         ), f"{gripper}: grip_at_position service unavailable"
 
-        release_service_name = f"/schunk/driver/{gripper}/release"
-        ReleaseServiceType = driver.get_service_type(release_service_name)
-        assert ReleaseServiceType is not None, f"{gripper}: release service not found"
-        release_client = node.create_client(ReleaseServiceType, release_service_name)
-        assert release_client.wait_for_service(
-            timeout_sec=5
-        ), f"{gripper}: release service unavailable"
-
         targets = [
             {"force": 50, "position": 0.01, "use_gpe": False, "outward": False},
             {"force": 100, "position": 0.02, "use_gpe": True, "outward": False},
@@ -366,12 +358,6 @@ def test_driver_implements_grip_at_position_and_release(lifecycle_interface):
                 grip_req.use_gpe = target["use_gpe"]
 
             future = grip_client.call_async(grip_req)
-            rclpy.spin_until_future_complete(node, future)
-            assert future.result().success, f"{gripper}: {future.result().message}"
-
-            # Release
-            release_req = ReleaseServiceType.Request()
-            future = release_client.call_async(release_req)
             rclpy.spin_until_future_complete(node, future)
             assert future.result().success, f"{gripper}: {future.result().message}"
 
