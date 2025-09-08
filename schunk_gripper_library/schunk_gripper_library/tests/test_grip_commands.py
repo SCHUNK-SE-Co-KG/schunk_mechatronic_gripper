@@ -68,3 +68,20 @@ def test_grip_fails_when_no_workpiece_detected():
     driver.acknowledge()
     assert not driver.grip(force=75, outward=True)
     driver.disconnect()
+
+
+@skip_without_gripper
+def test_grip_at_position_fails_with_invalid_arguments():
+    driver = Driver()
+
+    driver.connect(host="0.0.0.0", port=8000, device_id=12)
+    driver.acknowledge()
+
+    invalid_positions = [-1000, 1e6, 3.5]
+    invalid_forces = [0, -10, 200]
+
+    for pos in invalid_positions:
+        for force in invalid_forces:
+            assert not driver.grip(force=force, position=pos)
+
+    driver.disconnect()
