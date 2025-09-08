@@ -481,16 +481,18 @@ def test_driver_estimates_duration_of_grip_at_position():
     def set_actual_position(position: int) -> None:
         driver.plc_input_buffer[4:8] = bytes(struct.pack("i", position))
 
-    # Start near to mid_pos
-    set_actual_position(mid_pos - 1000)
+    positions = [min_pos, min_pos + 500, mid_pos, mid_pos + 500, max_pos, max_pos - 500]
     forces = [50, 75, 100]
 
-    durations = []
-    for force in forces:
-        duration = driver.estimate_duration(position_abs=mid_pos, force=force)
-        durations.append(duration)
+    for pos in positions:
+        # Start near to mid_position
+        set_actual_position(mid_pos - 1000)
+        durations = []
+        for force in forces:
+            duration = driver.estimate_duration(position_abs=pos, force=force)
+            durations.append(duration)
 
-    assert durations[0] > durations[1] > durations[2]
+        assert durations[0] > durations[1] > durations[2]
 
     # Cleanup
     driver.disconnect()
