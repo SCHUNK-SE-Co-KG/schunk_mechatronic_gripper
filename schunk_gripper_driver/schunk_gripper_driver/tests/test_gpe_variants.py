@@ -1,0 +1,70 @@
+# Copyright 2025 SCHUNK SE & Co. KG
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+# more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program. If not, see <https://www.gnu.org/licenses/>.
+# --------------------------------------------------------------------------------
+
+from schunk_gripper_driver.driver import Driver
+from schunk_gripper_library.utility import skip_without_gripper
+from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
+    Grip,
+    GripGPE,
+)
+
+
+@skip_without_gripper
+def test_grip_callback_handles_all_gpe_variants(ros2):
+    driver = Driver("driver")
+    driver.on_configure(state=None)
+    driver.on_activate(state=None)
+
+    for gripper in driver.grippers:
+
+        # Grip
+        driver._grip_cb(
+            request=Grip.Request(), response=Grip.Response(), gripper=gripper
+        )
+
+        # GripGPE
+        driver._grip_cb(
+            request=GripGPE.Request(), response=GripGPE.Response(), gripper=gripper
+        )
+
+        # More grip versions here ..
+
+    driver.on_deactivate(state=None)
+    driver.on_cleanup(state=None)
+
+
+@skip_without_gripper
+def test_driver_offers_gpe_specific_grip_services(ros2):
+    driver = Driver("driver")
+    driver.on_configure(state=None)
+
+    # Mimic modules with and without GPE and check
+    # if the driver creates the expected services
+
+    modules = ["EGU_50_M_B", "EGK_25_N_B"]
+    expected_types = [GripGPE, Grip]
+
+    for module, srv_type in zip(modules, expected_types):
+        driver.grippers[0]["driver"].module = module
+        driver.on_activate(state=None)
+
+        for service in driver.gripper_services:
+            if service.srv_name.endswith("/grip"):
+                assert service.srv_type == srv_type
+
+        driver.on_deactivate(state=None)
+
+    driver.on_cleanup(state=None)
