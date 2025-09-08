@@ -51,7 +51,7 @@ headless = DeclareLaunchArgument(
     default_value="false",
     description=(
         "Whether to `configure` and `activate` the driver "
-        "using the last successful configuration",
+        "using the last successful configuration"
     ),
 )
 
