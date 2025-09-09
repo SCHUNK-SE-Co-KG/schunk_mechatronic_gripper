@@ -21,6 +21,8 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     GripGPE,
     GripAtPosition,
     GripAtPositionGPE,
+    SoftGrip,
+    SoftGripGPE,
 )
 
 
@@ -56,6 +58,20 @@ def test_grip_callback_handles_all_gpe_variants(ros2):
             gripper=gripper,
         )
 
+        # SoftGrip
+        driver._grip_cb(
+            request=SoftGrip.Request(),
+            response=SoftGrip.Response(),
+            gripper=gripper,
+        )
+
+        # SoftGripGPE
+        driver._grip_cb(
+            request=SoftGripGPE.Request(),
+            response=SoftGripGPE.Response(),
+            gripper=gripper,
+        )
+
     driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
 
@@ -86,4 +102,37 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
 
         driver.on_deactivate(state=None)
 
+    driver.on_cleanup(state=None)
+
+
+@skip_without_gripper
+def test_driver_offers_gpe_specific_soft_grip_services(ros2):
+    driver = Driver("driver")
+    driver.on_configure(state=None)
+
+    # Mimic modules with and without GPE and check
+    # if the driver creates the expected services
+
+    modules = ["EGK_25_M_B", "EGK_25_N_B"]
+    expected_soft_grip_types = [SoftGripGPE, SoftGrip]
+
+    for module, grip_type in zip(modules, expected_soft_grip_types):
+        driver.grippers[0]["driver"].module = module
+        driver.on_activate(state=None)
+        for service in driver.gripper_services:
+            if service.srv_name.endswith("/soft_grip"):
+                assert service.srv_type == grip_type
+
+        driver.on_deactivate(state=None)
+
+    non_egk_modules = ["EGU_50_M_B", "EGU_50_N_B"]
+
+    for module in non_egk_modules:
+        driver.grippers[0]["driver"].module = module
+        driver.on_activate(state=None)
+        for service in driver.gripper_services:
+            if service.srv_name.endswith("/soft_grip"):
+                assert False
+
+        driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
