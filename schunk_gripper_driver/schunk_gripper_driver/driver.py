@@ -879,6 +879,8 @@ class Driver(Node):
         velocity = getattr(request, "velocity", None)
         if at_position is not None:
             at_position = int(at_position * 1e6)
+        if velocity is not None:
+            velocity = int(velocity * 1e6)
 
         response.success = gripper["driver"].grip(
             position=at_position,
