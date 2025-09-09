@@ -32,45 +32,21 @@ def test_grip_callback_handles_all_gpe_variants(ros2):
     driver.on_configure(state=None)
     driver.on_activate(state=None)
 
+    service_types = [
+        Grip,
+        GripGPE,
+        GripAtPosition,
+        GripAtPositionGPE,
+        SoftGrip,
+        SoftGripGPE,
+    ]
     for gripper in driver.grippers:
-
-        # Grip
-        driver._grip_cb(
-            request=Grip.Request(), response=Grip.Response(), gripper=gripper
-        )
-
-        # GripGPE
-        driver._grip_cb(
-            request=GripGPE.Request(), response=GripGPE.Response(), gripper=gripper
-        )
-
-        # GripAtPositon
-        driver._grip_cb(
-            request=GripAtPosition.Request(),
-            response=GripAtPosition.Response(),
-            gripper=gripper,
-        )
-
-        # GripAtPositionGPE
-        driver._grip_cb(
-            request=GripAtPositionGPE.Request(),
-            response=GripAtPositionGPE.Response(),
-            gripper=gripper,
-        )
-
-        # SoftGrip
-        driver._grip_cb(
-            request=SoftGrip.Request(),
-            response=SoftGrip.Response(),
-            gripper=gripper,
-        )
-
-        # SoftGripGPE
-        driver._grip_cb(
-            request=SoftGripGPE.Request(),
-            response=SoftGripGPE.Response(),
-            gripper=gripper,
-        )
+        for service_type in service_types:
+            driver._grip_cb(
+                request=service_type.Request(),
+                response=service_type.Response(),
+                gripper=gripper,
+            )
 
     driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
@@ -81,58 +57,44 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
     driver = Driver("driver")
     driver.on_configure(state=None)
 
-    # Mimic modules with and without GPE and check
-    # if the driver creates the expected services
-
-    modules = ["EGU_50_M_B", "EGK_25_N_B"]
-    expected_grip_types = [GripGPE, Grip]
-    expected_grip_at_position_types = [GripAtPositionGPE, GripAtPosition]
-
-    for module, grip_type, grip_at_position_type in zip(
-        modules, expected_grip_types, expected_grip_at_position_types
-    ):
+    module_expectations = {
+        # Basic Grip with GPE
+        "EGU_50_M_B": {
+            "/grip": GripGPE,
+            "/grip_at_position": GripAtPositionGPE,
+            "/soft_grip": None,
+        },
+        # Basic Grip without GPE
+        "EGU_50_N_B": {
+            "/grip": Grip,
+            "/grip_at_position": GripAtPosition,
+            "/soft_grip": None,
+        },
+        # Basic and Soft Grip with GPE
+        "EGK_25_M_B": {
+            "/grip": GripGPE,
+            "/grip_at_position": GripAtPositionGPE,
+            "/soft_grip": SoftGripGPE,
+        },
+        # Basic and Soft Grip without GPE
+        "EGK_25_N_B": {
+            "/grip": Grip,
+            "/grip_at_position": GripAtPosition,
+            "/soft_grip": SoftGrip,
+        },
+    }
+    for module, services in module_expectations.items():
         driver.grippers[0]["driver"].module = module
         driver.on_activate(state=None)
 
-        for service in driver.gripper_services:
-            if service.srv_name.endswith("/grip"):
-                assert service.srv_type == grip_type
-            if service.srv_name.endswith("/grip_at_position"):
-                assert service.srv_type == grip_at_position_type
+        for srv_suffix, expected_type in services.items():
+            for service in driver.gripper_services:
+                if service.srv_name.endswith(srv_suffix):
+                    if expected_type is not None:
+                        assert service.srv_type == expected_type
+                    else:
+                        assert False
 
         driver.on_deactivate(state=None)
 
-    driver.on_cleanup(state=None)
-
-
-@skip_without_gripper
-def test_driver_offers_gpe_specific_soft_grip_services(ros2):
-    driver = Driver("driver")
-    driver.on_configure(state=None)
-
-    # Mimic modules with and without GPE and check
-    # if the driver creates the expected services
-
-    modules = ["EGK_25_M_B", "EGK_25_N_B"]
-    expected_soft_grip_types = [SoftGripGPE, SoftGrip]
-
-    for module, grip_type in zip(modules, expected_soft_grip_types):
-        driver.grippers[0]["driver"].module = module
-        driver.on_activate(state=None)
-        for service in driver.gripper_services:
-            if service.srv_name.endswith("/soft_grip"):
-                assert service.srv_type == grip_type
-
-        driver.on_deactivate(state=None)
-
-    non_egk_modules = ["EGU_50_M_B", "EGU_50_N_B"]
-
-    for module in non_egk_modules:
-        driver.grippers[0]["driver"].module = module
-        driver.on_activate(state=None)
-        for service in driver.gripper_services:
-            if service.srv_name.endswith("/soft_grip"):
-                assert False
-
-        driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
