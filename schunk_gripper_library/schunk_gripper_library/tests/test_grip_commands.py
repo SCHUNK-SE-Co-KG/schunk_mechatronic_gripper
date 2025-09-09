@@ -94,11 +94,10 @@ def test_soft_grip_fails_with_invalid_arguments():
     driver.acknowledge()
 
     invalid_velocities = [-5, 1e9, 5.0]
+    forces = [50, -50]
 
     for vel in invalid_velocities:
-        assert not driver.grip(force=50, velocity=vel)
-
-    for vel in invalid_velocities:
-        assert not driver.grip(force=-50, velocity=vel)
+        for force in forces:
+            assert not driver.grip(force=force, velocity=vel)
 
     driver.disconnect()
