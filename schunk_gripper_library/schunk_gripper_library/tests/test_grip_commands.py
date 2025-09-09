@@ -85,3 +85,20 @@ def test_grip_at_position_fails_with_invalid_arguments():
             assert not driver.grip(force=force, position=pos)
 
     driver.disconnect()
+
+
+@skip_without_gripper
+def test_soft_grip_fails_with_invalid_arguments():
+    driver = Driver()
+    driver.connect(host="0.0.0.0", port=8000, device_id=12)
+    driver.acknowledge()
+
+    invalid_velocities = [-5, 1e9, 5.0]
+
+    for vel in invalid_velocities:
+        assert not driver.grip(force=50, velocity=vel)
+
+    for vel in invalid_velocities:
+        assert not driver.grip(force=-50, velocity=vel)
+
+    driver.disconnect()
