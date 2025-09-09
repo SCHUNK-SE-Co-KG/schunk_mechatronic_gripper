@@ -406,10 +406,10 @@ def test_driver_implements_soft_grip(lifecycle_interface):
         assert client.wait_for_service(timeout_sec=5), f"{gripper}: service unavailable"
 
         targets = [
-            {"force": 50, "velocity": 10.0, "use_gpe": False, "outward": False},
-            {"force": 100, "velocity": 11.0, "use_gpe": True, "outward": False},
-            {"force": 75, "velocity": 11.0, "use_gpe": False, "outward": True},
-            {"force": 88, "velocity": 12.0, "use_gpe": True, "outward": True},
+            {"force": 50, "velocity": 0.01, "use_gpe": False, "outward": False},
+            {"force": 100, "velocity": 0.07, "use_gpe": True, "outward": False},
+            {"force": 75, "velocity": 0.011, "use_gpe": False, "outward": True},
+            {"force": 88, "velocity": 0.015, "use_gpe": True, "outward": True},
         ]
 
         for target in targets:
