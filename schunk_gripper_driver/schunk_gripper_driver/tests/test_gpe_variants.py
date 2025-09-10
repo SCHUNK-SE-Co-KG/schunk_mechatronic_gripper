@@ -19,6 +19,8 @@ from schunk_gripper_library.utility import skip_without_gripper
 from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     Grip,
     GripGPE,
+    GripAtPosition,
+    GripAtPositionGPE,
 )
 
 
@@ -40,7 +42,19 @@ def test_grip_callback_handles_all_gpe_variants(ros2):
             request=GripGPE.Request(), response=GripGPE.Response(), gripper=gripper
         )
 
-        # More grip versions here ..
+        # GripAtPositon
+        driver._grip_cb(
+            request=GripAtPosition.Request(),
+            response=GripAtPosition.Response(),
+            gripper=gripper,
+        )
+
+        # GripAtPositionGPE
+        driver._grip_cb(
+            request=GripAtPositionGPE.Request(),
+            response=GripAtPositionGPE.Response(),
+            gripper=gripper,
+        )
 
     driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
@@ -55,15 +69,20 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
     # if the driver creates the expected services
 
     modules = ["EGU_50_M_B", "EGK_25_N_B"]
-    expected_types = [GripGPE, Grip]
+    expected_grip_types = [GripGPE, Grip]
+    expected_grip_at_position_types = [GripAtPositionGPE, GripAtPosition]
 
-    for module, srv_type in zip(modules, expected_types):
+    for module, grip_type, grip_at_position_type in zip(
+        modules, expected_grip_types, expected_grip_at_position_types
+    ):
         driver.grippers[0]["driver"].module = module
         driver.on_activate(state=None)
 
         for service in driver.gripper_services:
             if service.srv_name.endswith("/grip"):
-                assert service.srv_type == srv_type
+                assert service.srv_type == grip_type
+            if service.srv_name.endswith("/grip_at_position"):
+                assert service.srv_type == grip_at_position_type
 
         driver.on_deactivate(state=None)
 
