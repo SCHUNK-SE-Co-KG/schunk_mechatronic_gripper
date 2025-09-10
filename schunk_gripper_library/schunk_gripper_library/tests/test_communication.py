@@ -505,6 +505,37 @@ def test_driver_estimates_duration_of_grip_at_position():
 
 
 @skip_without_gripper
+def test_driver_estimates_duration_of_soft_grip():
+    driver = Driver()
+
+    driver.connect(serial_port="/dev/ttyUSB0", device_id=12, update_cycle=None)
+    max_pos = driver.module_parameters["max_pos"]
+    min_pos = driver.module_parameters["min_pos"]
+
+    def set_actual_position(position: int) -> None:
+        driver.plc_input_buffer[4:8] = bytes(struct.pack("i", position))
+
+    mid_pos = (min_pos + max_pos) // 2
+    set_actual_position(mid_pos)
+
+    force = 80
+    velocities = [10, 20, 40]
+
+    durations = []
+    for vel in velocities:
+        duration = driver.estimate_duration(
+            velocity=vel,
+            force=force,
+            outward=True,
+        )
+        durations.append(duration)
+    assert durations[0] > durations[1] > durations[2]
+
+    # Cleanup
+    driver.disconnect()
+
+
+@skip_without_gripper
 def test_connected_driver_has_module_parameters():
     driver = Driver()
     params = [
@@ -693,3 +724,32 @@ def test_driver_offers_method_for_composing_gripper_type():
     for entry in valid_combinations:
         gripper_type = driver.compose_gripper_type(**entry["args"])
         assert gripper_type == entry["expected"]
+
+
+def test_driver_can_detect_variant():
+    driver = Driver()
+    assert driver.get_variant() == ""  # when unconnected
+
+    for module in driver.valid_module_types.values():
+        driver.module = module
+        expected = module.split("_")[0]
+        assert driver.get_variant() == expected
+
+    unknown_types = [
+        "XYZ_99_PN_M",
+        "UG4_DIO_80",
+        "0x0048",
+        "???",
+        "_EGU_40_M_B",
+        "_EGU_40_M_B",
+        " EGK_123",
+        "EGu_5",
+        "EGU_90_M_B",
+        "EGK_100_E_Z",
+        "EZU_42_M_SD",
+        "",
+    ]
+
+    for idx, type_str in enumerate(unknown_types):
+        driver.module = type_str
+        assert driver.get_variant() == "", f"wrong type at index: {idx}"

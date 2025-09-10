@@ -28,6 +28,8 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     GripGPE,
     GripAtPosition,
     GripAtPositionGPE,
+    SoftGrip,
+    SoftGripGPE,
     Release,
     StartJogging,
     StartJoggingGPE,
@@ -439,6 +441,22 @@ class Driver(Node):
                         callback_group=self.gripper_services_cb_group,
                     )
                 )
+            if gripper["driver"].get_variant() == "EGK":
+                if gripper["driver"].gpe_available():
+                    service_types = [SoftGripGPE]
+                else:
+                    service_types = [SoftGrip]
+
+                service_names = ["soft_grip"]
+                for srv_name, srv_type in zip(service_names, service_types):
+                    self.gripper_services.append(
+                        self.create_service(
+                            srv_type,
+                            f"~/{gripper_id}/{srv_name}",
+                            partial(self._grip_cb, gripper=gripper),
+                            callback_group=self.gripper_services_cb_group,
+                        )
+                    )
             self.gripper_services.append(
                 self.create_service(
                     Release,
@@ -858,11 +876,15 @@ class Driver(Node):
         use_gpe = getattr(request, "use_gpe", False)
         scheduler = self.scheduler if self.needs_synchronize(gripper) else None
         at_position = getattr(request, "at_position", None)
+        velocity = getattr(request, "velocity", None)
         if at_position is not None:
             at_position = int(at_position * 1e6)
+        if velocity is not None:
+            velocity = int(velocity * 1e6)
 
         response.success = gripper["driver"].grip(
             position=at_position,
+            velocity=velocity,
             force=request.force,
             use_gpe=use_gpe,
             outward=request.outward,

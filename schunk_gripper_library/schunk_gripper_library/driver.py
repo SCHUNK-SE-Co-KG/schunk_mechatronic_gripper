@@ -352,6 +352,7 @@ class Driver(object):
         self,
         force: int,
         position: int | None = None,
+        velocity: int | None = None,
         use_gpe: bool = False,
         outward: bool = False,
         scheduler: Scheduler | None = None,
@@ -362,6 +363,9 @@ class Driver(object):
             return False
         if position is not None and not isinstance(position, int):
             return False
+        if velocity is not None:
+            if not isinstance(velocity, int) or velocity <= 0:
+                return False
 
         if position is not None:
             trigger_bit = 16
@@ -382,7 +386,10 @@ class Driver(object):
             self.set_gripping_force(force)
             if position is not None:
                 self.set_target_position(position)
-            self.set_target_speed(0)
+            if velocity is not None:
+                self.set_target_speed(velocity)
+            else:
+                self.set_target_speed(0)
             self.send_plc_output()
             desired_bits = {"5": cmd_toggle_before ^ 1, "3": 0}
             return self.wait_for_status(bits=desired_bits, timeout_sec=0.1)
@@ -392,7 +399,7 @@ class Driver(object):
             return self.wait_for_status(bits=desired_bits)
 
         duration_sec = self.estimate_duration(
-            position_abs=position, force=force, outward=outward
+            position_abs=position, velocity=velocity, force=force, outward=outward
         )
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
@@ -472,7 +479,7 @@ class Driver(object):
         self,
         release: bool = False,
         position_abs: int | None = None,
-        velocity: int = 0,
+        velocity: int | None = None,
         force: int = 0,
         outward: bool = False,
     ) -> float:
@@ -500,6 +507,8 @@ class Driver(object):
                 still_to_go = (
                     self.module_parameters["min_pos"] - self.get_actual_position()
                 )
+            if isinstance(velocity, int) and velocity > 0:
+                return abs(still_to_go) / velocity
             ratio = force / 100
             return abs(still_to_go) / (ratio * self.module_parameters["max_grp_vel"])
         return 0.0
@@ -579,6 +588,19 @@ class Driver(object):
         if keys[2] == "M":
             return True
         return False
+
+    def get_variant(self) -> str:
+        if not self.module:
+            return ""
+        if self.module not in self.valid_module_types.values():
+            return ""
+        if self.module.startswith("EGU"):
+            return "EGU"
+        elif self.module.startswith("EGK"):
+            return "EGK"
+        elif self.module.startswith("EZU"):
+            return "EZU"
+        return ""
 
     def update_module_parameters(self) -> bool:
 
