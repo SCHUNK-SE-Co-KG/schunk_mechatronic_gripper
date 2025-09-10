@@ -268,19 +268,23 @@ class Driver(object):
         else:
             return do()
 
-    def stop(self) -> bool:
+    def stop(self, scheduler: Scheduler | None = None) -> bool:
         if not self.connected:
             return False
 
-        self.clear_plc_output()
-        self.send_plc_output()
+        def do() -> bool:
+            self.clear_plc_output()
+            self.send_plc_output()
+            cmd_toggle_before = self.get_status_bit(bit=5)
+            self.set_control_bit(bit=1, value=True)
+            self.send_plc_output()
+            desired_bits = {"5": cmd_toggle_before ^ 1, "4": 1}
+            return self.wait_for_status(bits=desired_bits)
 
-        cmd_toggle_before = self.get_status_bit(bit=5)
-        self.set_control_bit(bit=1, value=True)
-        self.send_plc_output()
-
-        desired_bits = {"5": cmd_toggle_before ^ 1, "13": 1, "4": 1}
-        return self.wait_for_status(bits=desired_bits)
+        if scheduler:
+            return scheduler.execute(func=partial(do)).result()
+        else:
+            return do()
 
     def move_to_position(
         self,

@@ -222,7 +222,6 @@ def test_move_to_relative_position_fails_with_invalid_arguments():
         driver.disconnect()
 
 
-@pytest.mark.skip
 @skip_without_gripper
 def test_stop():
     driver = Driver()
@@ -238,7 +237,7 @@ def test_stop():
         )
         assert driver.acknowledge()
 
-        assert driver.stop()
+        assert driver.stop(), f"driver status: {driver.get_status_diagnostics()}"
         assert driver.disconnect()
 
 
