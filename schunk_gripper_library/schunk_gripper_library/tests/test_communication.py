@@ -549,7 +549,7 @@ def test_driver_estimates_duration_of_soft_grip_at_position():
 
     # Fix force, fix velocity, vary position
     fixed_force = 75
-    fixed_velocity = 20
+    fixed_velocity = 15000
     positions = [min_pos + 1000, mid_pos, max_pos]
 
     durations = []
@@ -565,7 +565,7 @@ def test_driver_estimates_duration_of_soft_grip_at_position():
 
     # Fix force, fix position, vary velocity
     fixed_position = mid_pos
-    velocities = [10, 20, 40]
+    velocities = [10000, 20000, 40000]
 
     durations = []
     for vel in velocities:
