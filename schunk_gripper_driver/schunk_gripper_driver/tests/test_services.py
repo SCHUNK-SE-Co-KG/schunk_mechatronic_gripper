@@ -39,11 +39,11 @@ import pytest
 def test_driver_advertises_state_depending_services(lifecycle_interface):
     driver = lifecycle_interface
     list_grippers = ["/schunk/driver/list_grippers"]
+    save_configuration = ["/schunk/driver/save_configuration"]
     config_services = [
         "/schunk/driver/add_gripper",
         "/schunk/driver/reset_grippers",
         "/schunk/driver/show_configuration",
-        "/schunk/driver/save_configuration",
         "/schunk/driver/load_previous_configuration",
     ]
     gripper_services = [
@@ -63,12 +63,14 @@ def test_driver_advertises_state_depending_services(lifecycle_interface):
         # After startup -> unconfigured
         driver.check_state(State.PRIMARY_STATE_UNCONFIGURED)
         assert driver.check(config_services, dtype="service", should_exist=True)
+        assert driver.check(save_configuration, dtype="service", should_exist=True)
         assert driver.check(list_grippers, dtype="service", should_exist=False)
 
         # After configure -> inactive
         driver.change_state(Transition.TRANSITION_CONFIGURE)
         time.sleep(until_change_takes_effect)
         assert driver.check(list_grippers, dtype="service", should_exist=True)
+        assert driver.check(save_configuration, dtype="service", should_exist=True)
         assert driver.check(config_services, dtype="service", should_exist=False)
         assert driver.check(gripper_services, dtype="service", should_exist=False)
 
@@ -76,6 +78,7 @@ def test_driver_advertises_state_depending_services(lifecycle_interface):
         driver.change_state(Transition.TRANSITION_ACTIVATE)
         time.sleep(until_change_takes_effect)
         assert driver.check(list_grippers, dtype="service", should_exist=True)
+        assert driver.check(save_configuration, dtype="service", should_exist=True)
         assert driver.check(config_services, dtype="service", should_exist=False)
         assert driver.check(gripper_services, dtype="service", should_exist=True)
 
@@ -83,6 +86,7 @@ def test_driver_advertises_state_depending_services(lifecycle_interface):
         driver.change_state(Transition.TRANSITION_DEACTIVATE)
         time.sleep(until_change_takes_effect)
         assert driver.check(list_grippers, dtype="service", should_exist=True)
+        assert driver.check(save_configuration, dtype="service", should_exist=True)
         assert driver.check(config_services, dtype="service", should_exist=False)
         assert driver.check(gripper_services, dtype="service", should_exist=False)
 
@@ -90,6 +94,7 @@ def test_driver_advertises_state_depending_services(lifecycle_interface):
         driver.change_state(Transition.TRANSITION_CLEANUP)
         time.sleep(until_change_takes_effect)
         assert driver.check(config_services, dtype="service", should_exist=True)
+        assert driver.check(save_configuration, dtype="service", should_exist=True)
         assert driver.check(list_grippers, dtype="service", should_exist=False)
 
 
