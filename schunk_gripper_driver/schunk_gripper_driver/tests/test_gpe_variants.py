@@ -62,28 +62,24 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
     driver.on_configure(state=None)
 
     module_expectations = {
-        # Basic Grip with GPE
         "EGU_50_M_B": {
             "/grip": GripGPE,
             "/grip_at_position": GripAtPositionGPE,
             "/soft_grip": None,
             "/soft_grip_at_position": None,
         },
-        # Basic Grip without GPE
         "EGU_50_N_B": {
             "/grip": Grip,
             "/grip_at_position": GripAtPosition,
             "/soft_grip": None,
             "/soft_grip_at_position": None,
         },
-        # Basic and Soft Grip with GPE
         "EGK_25_M_B": {
             "/grip": GripGPE,
             "/grip_at_position": GripAtPositionGPE,
             "/soft_grip": SoftGripGPE,
             "/soft_grip_at_position": SoftGripAtPositionGPE,
         },
-        # Basic and Soft Grip without GPE
         "EGK_25_N_B": {
             "/grip": Grip,
             "/grip_at_position": GripAtPosition,
