@@ -32,6 +32,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     SoftGripGPE,
     SoftGripAtPosition,
     SoftGripAtPositionGPE,
+    StrongGripGPE,
     Release,
     StartJogging,
     StartJoggingGPE,
@@ -449,6 +450,21 @@ class Driver(Node):
                     service_types = [SoftGrip, SoftGripAtPosition]
 
                 service_names = ["soft_grip", "soft_grip_at_position"]
+                for srv_name, srv_type in zip(service_names, service_types):
+                    self.gripper_services.append(
+                        self.create_service(
+                            srv_type,
+                            f"~/{gripper_id}/{srv_name}",
+                            partial(self._grip_cb, gripper=gripper),
+                            callback_group=self.gripper_services_cb_group,
+                        )
+                    )
+            if (
+                gripper["driver"].get_variant() in ["EGU", "EZU"]
+                and gripper["driver"].gpe_available()
+            ):
+                service_types = [StrongGripGPE]
+                service_names = ["strong_grip"]
                 for srv_name, srv_type in zip(service_names, service_types):
                     self.gripper_services.append(
                         self.create_service(
