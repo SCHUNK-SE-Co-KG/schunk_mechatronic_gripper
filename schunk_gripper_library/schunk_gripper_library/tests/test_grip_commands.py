@@ -16,9 +16,13 @@ def test_grip_fails_with_invalid_arguments():
         # Invalid arguments
         driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
         driver.acknowledge()
-        invalid_forces = [0.1, -0.1, 170, 75.0]
+        invalid_forces = [0.1, -0.1, 75.0]
         for force in invalid_forces:
             assert not driver.grip(force)
+
+        if driver.get_variant() == "EGK":
+            assert not driver.grip(force=170)
+
         driver.disconnect()
 
 
@@ -78,7 +82,11 @@ def test_grip_at_position_fails_with_invalid_arguments():
     driver.acknowledge()
 
     invalid_positions = [-1000, 1e6, 3.5]
-    invalid_forces = [0, -10, 200]
+    invalid_forces = [0, -10]
+    if driver.get_variant() == "EGK":
+        invalid_forces += [200]
+    else:
+        invalid_forces += [300]
 
     for pos in invalid_positions:
         for force in invalid_forces:
