@@ -462,11 +462,7 @@ def test_driver_implements_soft_grip_at_position(lifecycle_interface):
 
     for gripper in driver.list_grippers():
         if not gripper.startswith("EGK"):
-            driver.change_state(Transition.TRANSITION_DEACTIVATE)
-            driver.change_state(Transition.TRANSITION_CLEANUP)
-            node.destroy_node()
-            pytest.skip(f"Skipping non-EGK gripper: {gripper}")
-
+            continue
         service_name = f"/schunk/driver/{gripper}/soft_grip_at_position"
         ServiceType = driver.get_service_type(service_name)
         assert ServiceType is not None, f"{gripper}: service type not found"
