@@ -536,6 +536,53 @@ def test_driver_estimates_duration_of_soft_grip():
 
 
 @skip_without_gripper
+def test_driver_estimates_duration_of_soft_grip_at_position():
+    driver = Driver()
+    driver.connect(serial_port="/dev/ttyUSB0", device_id=12, update_cycle=None)
+
+    max_pos = driver.module_parameters["max_pos"]
+    min_pos = driver.module_parameters["min_pos"]
+    mid_pos = (min_pos + max_pos) // 2
+
+    def set_actual_position(position: int) -> None:
+        driver.plc_input_buffer[4:8] = bytes(struct.pack("i", position))
+
+    # Fix force, fix velocity, vary position
+    fixed_force = 75
+    fixed_velocity = 15000
+    positions = [min_pos + 1000, mid_pos, max_pos]
+
+    durations = []
+    for pos in positions:
+        set_actual_position(min_pos)
+        duration = driver.estimate_duration(
+            position_abs=pos,
+            force=fixed_force,
+            velocity=fixed_velocity,
+        )
+        durations.append(duration)
+    assert durations[0] < durations[1] < durations[2]
+
+    # Fix force, fix position, vary velocity
+    fixed_position = mid_pos
+    velocities = [10000, 20000, 40000]
+
+    durations = []
+    for vel in velocities:
+        set_actual_position(min_pos)
+        duration = driver.estimate_duration(
+            position_abs=fixed_position,
+            force=fixed_force,
+            velocity=vel,
+        )
+        durations.append(duration)
+    assert durations[0] > durations[1] > durations[2]
+
+    # Cleanup
+    driver.disconnect()
+
+
+@skip_without_gripper
 def test_connected_driver_has_module_parameters():
     driver = Driver()
     params = [
