@@ -10,6 +10,7 @@ import os
 import termios
 from socket import socket as Socket
 import socket
+import netifaces
 
 
 def supports_parity(serial_port: str) -> bool:
@@ -137,6 +138,33 @@ class EthernetScanner(object):
         self.is_ready: bool = False
         self.port: int = 3250  # HMS standard
         self._reset_socket()
+
+    def scan(self) -> list[str]:
+        result = []
+        interfaces = netifaces.interfaces()
+        interfaces = list(filter(lambda iface: iface.startswith("eth"), interfaces))
+
+        for iface in interfaces:
+            addresses = netifaces.ifaddresses(iface)
+            if netifaces.AF_INET in addresses:
+                ip_info = addresses[netifaces.AF_INET][0]
+                broadcast_ip = ip_info.get("broadcast", "255.255.255.255")
+
+                message = bytes.fromhex("c1abffffffffffffac91a1644eda00000000")
+                try:
+                    self.socket.sendto(message, (broadcast_ip, self.port))
+                    try:
+                        while True:
+                            response, addr = self.socket.recvfrom(1024)
+                            if response == message:  # it's me
+                                continue
+                            result.append(addr[0])
+                    except socket.timeout:
+                        pass
+                except Exception as e:
+                    print(f"Error on {iface}: {e}")
+
+        return result
 
     def __enter__(self) -> "EthernetScanner":
         if self.socket.fileno() == -1:  # already closed once

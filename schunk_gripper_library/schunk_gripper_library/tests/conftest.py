@@ -56,7 +56,7 @@ def simulate_pymodbus_failure():
     patcher.stop()
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def ethernet_gripper():
     gripper = HMSChip()
     gripper.power_on()

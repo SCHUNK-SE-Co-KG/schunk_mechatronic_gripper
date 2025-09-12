@@ -38,3 +38,25 @@ def test_scanner_creates_new_socket_when_reset():
     scanner._reset_socket()
     after = scanner.socket
     assert after != before
+
+
+def test_scanner_offers_a_scan_method(ethernet_gripper):
+
+    # The fixture provides an HMS chip that should
+    # respond to the scanning requests.
+
+    with Scanner() as scanner:
+        grippers = scanner.scan()
+        assert isinstance(grippers, list)
+        assert len(grippers) == 1
+
+        for entry in grippers:
+            assert isinstance(entry, str)
+            assert entry != ""
+
+
+def test_scan_result_is_empty_when_nothing_found():
+
+    # Start this test without the fixture
+    with Scanner() as scanner:
+        assert scanner.scan() == []
