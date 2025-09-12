@@ -21,6 +21,7 @@ from schunk_gripper_library.utility import skip_without_gripper
 
 
 DRIVER_PARAMETERS = [
+    "serial_port",
     "log_level",
 ]
 
@@ -50,6 +51,12 @@ def test_driver_has_expected_parameters_after_startup(driver):
 
     default_parameters = [
         Parameter(
+            name="serial_port",
+            value=ParameterValue(
+                type=ParameterType.PARAMETER_STRING, string_value="/dev/ttyUSB0"
+            ),
+        ),
+        Parameter(
             name="log_level",
             value=ParameterValue(
                 type=ParameterType.PARAMETER_STRING, string_value="INFO"
@@ -77,6 +84,12 @@ def test_driver_supports_setting_parameters(driver):
     assert set_params_client.wait_for_service(timeout_sec=2)
 
     parameters = [
+        Parameter(
+            name="serial_port",
+            value=ParameterValue(
+                type=ParameterType.PARAMETER_STRING, string_value="/dev/serial-port"
+            ),
+        ),
         Parameter(
             name="log_level",
             value=ParameterValue(

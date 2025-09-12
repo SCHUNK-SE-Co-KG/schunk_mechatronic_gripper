@@ -36,6 +36,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     StartJogging,
     StartJoggingGPE,
     ShowConfiguration,
+    Scan,
     ShowGripperSpecification,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
@@ -50,7 +51,7 @@ from rclpy.service import Service
 from rclpy.publisher import Publisher
 from rclpy.executors import MultiThreadedExecutor, ExternalShutdownException
 from functools import partial
-from schunk_gripper_library.utility import Scheduler
+from schunk_gripper_library.utility import Scheduler, Scanner
 from typing import TypedDict
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rcl_interfaces.msg import SetParametersResult
@@ -77,11 +78,14 @@ class Driver(Node):
         super().__init__(node_name, **kwargs)
         self.grippers: list[Gripper] = []
 
+        # Node parameters
+        self.declare_parameter("log_level", "INFO")
+        self.declare_parameter("serial_port", "/dev/ttyUSB0")
+
         # Initialization parameters
         self.init_parameters = {
             "host": "",
             "port": 80,
-            "serial_port": "/dev/ttyUSB0",
             "device_id": 12,
             "start_empty": False,
             "headless": False,
@@ -110,9 +114,9 @@ class Driver(Node):
         for name in self.init_parameters.keys():
             self.undeclare_parameter(name)
 
-        # Node parameters
-        self.declare_parameter("log_level", "INFO")
-
+        self.scanner: Scanner = Scanner(
+            serial_port=self.get_parameter("serial_port").value
+        )
         self.scheduler: Scheduler = Scheduler()
         self.gripper_services: list[Service] = []
         self.joint_state_publishers: dict[str, Publisher] = {}
@@ -138,6 +142,7 @@ class Driver(Node):
             "~/load_previous_configuration",
             self._load_previous_configuration_cb,
         )
+        self.scan_srv = self.create_service(Scan, "~/scan", self._scan_cb)
         self.add_on_set_parameters_callback(self._param_cb)
 
         # For concurrently running publishers
@@ -375,6 +380,7 @@ class Driver(Node):
         self.destroy_service(self.reset_grippers_srv)
         self.destroy_service(self.show_configuration_srv)
         self.destroy_service(self.load_previous_configuration_srv)
+        self.destroy_service(self.scan_srv)
 
         if self.headless:
             self.get_logger().debug(
@@ -575,6 +581,7 @@ class Driver(Node):
             "~/load_previous_configuration",
             self._load_previous_configuration_cb,
         )
+        self.scan_srv = self.create_service(Scan, "~/scan", self._scan_cb)
 
         return TransitionCallbackReturn.SUCCESS
 
@@ -749,6 +756,38 @@ class Driver(Node):
                 time.sleep(max(0, next_time - now))
 
     # Service callbacks
+    def _scan_cb(self, request: Scan.Request, response: Scan.Response):
+        self.get_logger().debug(f"---> Scanning for {request.num_devices} devices")
+        try:
+            self.scheduler.start()
+            device_ids = self.scanner.scan(
+                request.num_devices, scheduler=self.scheduler
+            )
+            response.success = (
+                True if isinstance(device_ids, list) and len(device_ids) > 0 else False
+            )
+
+            if response.success:
+                for id in device_ids:
+                    self.add_gripper(
+                        serial_port=self.get_parameter("serial_port").value,
+                        device_id=id,
+                    )
+
+                response.message = (
+                    f"Successfully scanned and found {len(device_ids)} devices. "
+                    f"Their IDs are now: {device_ids}"
+                )
+
+            else:
+                response.message = f"Failed to scan for {request.num_devices} devices"
+        except Exception as e:
+            response.success = False
+            response.message = f"Error during scanning: {str(e)}"
+        finally:
+            self.scheduler.stop()
+        return response
+
     def _add_gripper_cb(
         self, request: AddGripper.Request, response: AddGripper.Response
     ):

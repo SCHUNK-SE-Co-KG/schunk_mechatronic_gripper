@@ -1,6 +1,5 @@
 import struct
 from threading import Lock
-from pymodbus.client import ModbusSerialClient
 from pymodbus.pdu import ModbusPDU
 import re
 from threading import Thread, Event
@@ -9,41 +8,9 @@ from httpx import Client, ConnectError, ConnectTimeout, ReadTimeout
 from importlib.resources import files
 from typing import Union
 import json
-from .utility import Scheduler, supports_parity
+from .utility import Scheduler, NonExclusiveSerialClient, supports_parity
 from functools import partial
-from pymodbus.logging import Log
-import serial  # type: ignore [import-untyped]
 from pymodbus.exceptions import ModbusIOException
-
-
-class NonExclusiveSerialClient(ModbusSerialClient):
-    def connect(self) -> bool:
-        """
-        Exact copy of the original connect() method with the sole exception of
-        using `exclusive=False` for the serial connection. We need this to have
-        several driver instances connect and speak over the same Modbus wire. A
-        high-level entity will manage concurrency with a scheduler for
-        multi-gripper scenarios.
-
-        """
-        if self.socket:  # type: ignore [has-type]
-            return True
-        try:
-            self.socket = serial.serial_for_url(
-                self.comm_params.host,
-                timeout=self.comm_params.timeout_connect,
-                bytesize=self.comm_params.bytesize,
-                stopbits=self.comm_params.stopbits,
-                baudrate=self.comm_params.baudrate,
-                parity=self.comm_params.parity,
-                exclusive=False,
-            )
-            self.socket.inter_byte_timeout = self.inter_byte_timeout
-            self.last_frame_end = None
-        except Exception as msg:
-            Log.error("{}", msg)
-            self.close()
-        return self.socket is not None
 
 
 class Driver(object):
