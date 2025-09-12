@@ -38,6 +38,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     StartJoggingGPE,
     ShowConfiguration,
     ShowGripperSpecification,
+    ScanGrippers,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -138,6 +139,11 @@ class Driver(Node):
             Trigger,
             "~/load_previous_configuration",
             self._load_previous_configuration_cb,
+        )
+        self.scan_grippers_srv = self.create_service(
+            ScanGrippers,
+            "~/scan",
+            self._scan_grippers_cb,
         )
         self.add_on_set_parameters_callback(self._param_cb)
 
@@ -376,6 +382,7 @@ class Driver(Node):
         self.destroy_service(self.reset_grippers_srv)
         self.destroy_service(self.show_configuration_srv)
         self.destroy_service(self.load_previous_configuration_srv)
+        self.destroy_service(self.scan_grippers_srv)
 
         if self.headless:
             self.get_logger().debug(
@@ -591,6 +598,11 @@ class Driver(Node):
             "~/load_previous_configuration",
             self._load_previous_configuration_cb,
         )
+        self.scan_grippers_srv = self.create_service(
+            ScanGrippers,
+            "~/scan",
+            self._scan_grippers_cb,
+        )
 
         return TransitionCallbackReturn.SUCCESS
 
@@ -796,6 +808,13 @@ class Driver(Node):
         self, request: Trigger.Request, response: Trigger.Response
     ):
         response.success = self.load_previous_configuration()
+        return response
+
+    def _scan_grippers_cb(
+        self, request: ScanGrippers.Request, response: ScanGrippers.Response
+    ):
+        response.grippers = []
+        response.connections = []
         return response
 
     def _list_grippers_cb(
