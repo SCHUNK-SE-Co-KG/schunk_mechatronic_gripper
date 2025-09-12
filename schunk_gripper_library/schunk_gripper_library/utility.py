@@ -149,8 +149,13 @@ class EthernetScanner(object):
             if netifaces.AF_INET in addresses:
                 ip_info = addresses[netifaces.AF_INET][0]
                 broadcast_ip = ip_info.get("broadcast", "255.255.255.255")
-
-                message = bytes.fromhex("c1abffffffffffffac91a1644eda00000000")
+                mac_addr = addresses[netifaces.AF_LINK][0]["addr"].replace(":", "")
+                message = (
+                    bytes.fromhex("c1ab")
+                    + bytes.fromhex("ff" * 6)
+                    + bytes.fromhex(mac_addr)
+                    + bytes.fromhex("00" * 4)
+                )
                 try:
                     self.socket.sendto(message, (broadcast_ip, self.port))
                     try:
