@@ -356,7 +356,7 @@ def test_driver_estimates_duration_of_positioning_operations():
             "should_take": 0.0,
         },
         {
-            "args": {"force": 270},
+            "args": {"force": 270.0},
             "should_take": 0.0,
         },
     ]

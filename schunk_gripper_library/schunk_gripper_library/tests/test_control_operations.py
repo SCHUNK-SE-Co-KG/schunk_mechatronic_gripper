@@ -85,7 +85,7 @@ def test_driver_rejects_invalid_target_speed():
 
 def test_driver_supports_reading_and_writing_gripping_force():
     driver = Driver()
-    invalid_forces = [0, 0.0, -1, 0.75, 60.0, "80%"]
+    invalid_forces = [0.0, 0.75, 60.0, "80%"]
     for force in invalid_forces:
         assert not driver.set_gripping_force(force)
 

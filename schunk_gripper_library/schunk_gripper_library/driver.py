@@ -493,12 +493,12 @@ class Driver(object):
             still_to_go = position_abs - self.get_actual_position()
             if isinstance(velocity, int) and velocity > 0:
                 return abs(still_to_go) / velocity
-            if isinstance(force, int) and 0 < force <= 100:
+            if isinstance(force, int) and force > 0:
                 grip_vel = (force / 100) * self.module_parameters["max_grp_vel"]
                 return abs(still_to_go) / grip_vel
             return 0.0
 
-        if isinstance(force, int) and force > 0 and force <= 200:
+        if isinstance(force, int) and force > 0:
             if outward:
                 still_to_go = (
                     self.module_parameters["max_pos"] - self.get_actual_position()
@@ -909,12 +909,6 @@ class Driver(object):
     def set_gripping_force(self, gripping_force: int) -> bool:
         with self.output_buffer_lock:
             if not isinstance(gripping_force, int):
-                return False
-            if gripping_force <= 0:
-                return False
-            if self.get_variant() in ["EGU", "EZU"] and gripping_force > 200:
-                return False
-            if self.get_variant() == "EGK" and gripping_force > 100:
                 return False
             data = bytes(struct.pack("i", gripping_force))
             if self.fieldbus == "PN":

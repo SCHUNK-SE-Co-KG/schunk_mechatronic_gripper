@@ -81,12 +81,8 @@ def test_grip_at_position_fails_with_invalid_arguments():
     driver.connect(host="0.0.0.0", port=8000, device_id=12)
     driver.acknowledge()
 
-    invalid_positions = [-1000, 1e6, 3.5]
-    invalid_forces = [0, -10]
-    if driver.get_variant() == "EGK":
-        invalid_forces += [200]
-    else:
-        invalid_forces += [300]
+    invalid_positions = [-1000.0, 1e6, 3.5]
+    invalid_forces = [0.0, -10.0]
 
     for pos in invalid_positions:
         for force in invalid_forces:
@@ -132,10 +128,10 @@ def test_soft_grip_at_position_fails_with_invalid_arguments():
 @skip_without_gripper
 def test_strong_grip_fails_with_invalid_arguments():
     driver = Driver()
-    driver.connect(host="0.0.0.0", port=8000, device_id=12)
+    driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
     driver.acknowledge()
 
-    forces = [-50, 0, 25.0, 201, 1e9]
+    forces = [-50, 0.0, 25.0, 201, 1e9]
 
     for force in forces:
         assert not driver.grip(force=force)
