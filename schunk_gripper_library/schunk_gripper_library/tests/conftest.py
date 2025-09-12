@@ -1,5 +1,6 @@
 import pytest
 from .etc.pseudo_terminals import Connection
+from .etc.hms_chip import HMSChip
 from unittest.mock import patch
 import httpx
 import pymodbus
@@ -53,3 +54,11 @@ def simulate_pymodbus_failure():
     yield controller
 
     patcher.stop()
+
+
+@pytest.fixture
+def ethernet_gripper():
+    gripper = HMSChip()
+    gripper.power_on()
+    yield None
+    gripper.power_off()
