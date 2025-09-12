@@ -10,10 +10,9 @@ class HMSChip(object):
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.settimeout(0.5)
         self.port: int = 3250  # HMS standard
-        self.trigger: bytes = bytes.fromhex("c1abffffffffffffac91a1644eda00000000")
-        self.response: bytes = bytes.fromhex(
+        self.response_payload: bytes = bytes.fromhex(
             (
-                "c1abac91a1644eda00301145328d0100"
+                "00301145328d0100"
                 "5b000001000107352e30332e30300215"
                 "5346502d352e335f4547552036302d50"
                 "4e2d4d2d420301030c01280b01400404"
@@ -37,11 +36,29 @@ class HMSChip(object):
         if self.thread.is_alive():
             self.thread.join()
 
+    def _valid(self, data: bytes) -> tuple[bool, str]:
+        sequence = bytearray(data)
+        result = (False, "")
+        if len(data) != 18:
+            return result
+        if sequence[:2] != bytes.fromhex("c1ab"):
+            return result
+        if sequence[2:8] != bytes.fromhex("ff" * 6):
+            return result
+        if sequence[-4:] != bytes.fromhex("00" * 4):
+            return result
+        result = (True, sequence[8:-4].hex())
+        return result
+
     def _listen(self) -> None:
         while not self.stop_event.is_set():
             try:
                 data, addr = self.sock.recvfrom(1024)
-                if data == self.trigger:
-                    self.sock.sendto(self.response, addr)
+                valid, mac_addr = self._valid(data)
+                if valid:
+                    response = bytes.fromhex("c1ab")
+                    response += bytes.fromhex(mac_addr)
+                    response += self.response_payload
+                    self.sock.sendto(response, addr)
             except socket.timeout:
                 continue
