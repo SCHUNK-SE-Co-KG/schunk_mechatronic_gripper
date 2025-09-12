@@ -23,7 +23,7 @@ setup(
         "pyserial",
         "httpx",
         "pytest",
-        "netifaces",
+        "netifaces2",
     ],
     zip_safe=True,
     author="Stefan Scherzinger",

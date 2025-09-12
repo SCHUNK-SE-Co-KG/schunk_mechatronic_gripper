@@ -143,13 +143,15 @@ class EthernetScanner(object):
         result = []
         interfaces = netifaces.interfaces()
         interfaces = list(filter(lambda iface: iface.startswith("eth"), interfaces))
+        AF_INET = netifaces.InterfaceType.AF_INET
+        AF_PACKET = netifaces.InterfaceType.AF_PACKET
 
         for iface in interfaces:
             addresses = netifaces.ifaddresses(iface)
-            if netifaces.AF_INET in addresses:
-                ip_info = addresses[netifaces.AF_INET][0]
-                broadcast_ip = ip_info.get("broadcast", "255.255.255.255")
-                mac_addr = addresses[netifaces.AF_LINK][0]["addr"].replace(":", "")
+
+            if AF_INET in addresses and AF_PACKET in addresses:
+                broadcast_ip = addresses[AF_INET][0].get("broadcast", "255.255.255.255")
+                mac_addr = addresses[AF_PACKET][0]["addr"].replace(":", "")
                 message = (
                     bytes.fromhex("c1ab")
                     + bytes.fromhex("ff" * 6)
