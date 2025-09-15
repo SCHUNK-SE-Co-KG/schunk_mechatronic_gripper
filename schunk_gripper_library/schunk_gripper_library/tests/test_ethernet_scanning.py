@@ -5,7 +5,8 @@ import time
 def test_scanner_has_expected_fields():
     with Scanner() as scanner:
         assert scanner.socket is not None
-        assert scanner.port is not None
+        assert scanner.discovery_port is not None
+        assert scanner.webserver_port is not None
 
 
 def test_scanner_is_ready_on_enter():
@@ -51,9 +52,13 @@ def test_scanner_offers_a_scan_method(ethernet_gripper):
         assert isinstance(grippers, list)
         assert len(grippers) >= 1
 
-        for entry in grippers:
-            assert isinstance(entry, str)
-            assert entry != ""
+        for gripper in grippers:
+            assert isinstance(gripper, dict)
+            assert isinstance(gripper["host"], str)
+            assert isinstance(gripper["port"], int)
+
+            assert gripper["host"] != ""
+            assert gripper["port"] == 80
 
 
 def test_scan_result_is_empty_without_context_manager():

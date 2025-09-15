@@ -136,11 +136,12 @@ class Scheduler(object):
 class EthernetScanner(object):
     def __init__(self):
         self.is_ready: bool = False
-        self.port: int = 3250  # HMS standard
+        self.discovery_port: int = 3250  # HMS standard
+        self.webserver_port: int = 80
         self._reset_socket()
 
-    def scan(self) -> list[str]:
-        result: list[str] = []
+    def scan(self) -> list[dict[str, int]]:
+        result: list[dict[str, int]] = []
         if not self.is_ready:
             return result
         interfaces = netifaces.interfaces()
@@ -161,13 +162,15 @@ class EthernetScanner(object):
                     + bytes.fromhex("00" * 4)
                 )
                 try:
-                    self.socket.sendto(message, (broadcast_ip, self.port))
+                    self.socket.sendto(message, (broadcast_ip, self.discovery_port))
                     try:
                         while True:
                             response, addr = self.socket.recvfrom(1024)
                             if response == message:  # it's me
                                 continue
-                            result.append(addr[0])
+                            result.append(
+                                {"host": addr[0], "port": self.webserver_port}
+                            )
                     except socket.timeout:
                         pass
                 except Exception as e:
@@ -178,7 +181,7 @@ class EthernetScanner(object):
     def __enter__(self) -> "EthernetScanner":
         if self.socket.fileno() == -1:  # already closed once
             self._reset_socket()
-        self.socket.bind(("", self.port))  # listen on all local interfaces
+        self.socket.bind(("", self.discovery_port))  # listen on all local interfaces
         self.is_ready = True
         return self
 
