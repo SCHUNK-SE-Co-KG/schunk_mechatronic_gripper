@@ -50,6 +50,7 @@ def test_driver_advertises_state_depending_services(lifecycle_interface):
     gripper_services = [
         "acknowledge",
         "fast_stop",
+        "stop",
         "move_to_absolute_position",
         "grip",
         "release",
@@ -184,6 +185,25 @@ def test_driver_implements_acknowledge(lifecycle_interface):
             "error_code: 0x0, warning_code: 0x0, additional_code: 0x0"  # everything ok
         )
         assert future.result().message == expected_msg
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+
+
+@skip_without_gripper
+def test_driver_implements_stop(lifecycle_interface):
+    driver = lifecycle_interface
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    node = Node("check_stop")
+    for gripper in driver.list_grippers():
+        client = node.create_client(Trigger, f"/schunk/driver/{gripper}/stop")
+        assert client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
+        future = client.call_async(Trigger.Request())
+        rclpy.spin_until_future_complete(node, future, timeout_sec=1)
+
+        assert future.result().success
 
     driver.change_state(Transition.TRANSITION_DEACTIVATE)
     driver.change_state(Transition.TRANSITION_CLEANUP)

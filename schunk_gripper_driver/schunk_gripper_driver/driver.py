@@ -594,6 +594,15 @@ class Driver(Node):
                 )
             )
 
+            self.gripper_services.append(
+                self.create_service(
+                    Trigger,
+                    f"~/{gripper_id}/stop",
+                    partial(self._stop_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+
         # Publishers for each gripper
         for idx, _ in enumerate(self.grippers):
             gripper = self.grippers[idx]
@@ -971,6 +980,20 @@ class Driver(Node):
             response.success = gripper["driver"].acknowledge(scheduler=self.scheduler)
         else:
             response.success = gripper["driver"].acknowledge()
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _stop_cb(
+        self,
+        request: Trigger.Request,
+        response: Trigger.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Stop")
+        if self.needs_synchronize(gripper):
+            response.success = gripper["driver"].stop(scheduler=self.scheduler)
+        else:
+            response.success = gripper["driver"].stop()
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
