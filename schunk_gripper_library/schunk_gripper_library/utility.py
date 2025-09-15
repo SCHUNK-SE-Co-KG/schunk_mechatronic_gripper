@@ -140,7 +140,9 @@ class EthernetScanner(object):
         self._reset_socket()
 
     def scan(self) -> list[str]:
-        result = []
+        result: list[str] = []
+        if not self.is_ready:
+            return result
         interfaces = netifaces.interfaces()
         interfaces = list(filter(lambda iface: iface.startswith("eth"), interfaces))
         AF_INET = netifaces.InterfaceType.AF_INET

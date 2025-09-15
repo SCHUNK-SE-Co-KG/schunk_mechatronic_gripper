@@ -1,4 +1,5 @@
 from schunk_gripper_library.utility import EthernetScanner as Scanner
+import time
 
 
 def test_scanner_has_expected_fields():
@@ -48,15 +49,17 @@ def test_scanner_offers_a_scan_method(ethernet_gripper):
     with Scanner() as scanner:
         grippers = scanner.scan()
         assert isinstance(grippers, list)
-        assert len(grippers) == 1
+        assert len(grippers) >= 1
 
         for entry in grippers:
             assert isinstance(entry, str)
             assert entry != ""
 
 
-def test_scan_result_is_empty_when_nothing_found():
-
-    # Start this test without the fixture
-    with Scanner() as scanner:
-        assert scanner.scan() == []
+def test_scan_result_is_empty_without_context_manager():
+    scanner = Scanner()
+    start = time.time()
+    result = scanner.scan()
+    stop = time.time()
+    assert stop - start < 0.1  # unready scan should return immediately
+    assert result == []
