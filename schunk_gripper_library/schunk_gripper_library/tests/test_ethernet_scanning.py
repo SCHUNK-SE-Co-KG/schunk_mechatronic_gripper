@@ -1,0 +1,70 @@
+from schunk_gripper_library.utility import EthernetScanner as Scanner
+import time
+
+
+def test_scanner_has_expected_fields():
+    with Scanner() as scanner:
+        assert scanner.socket is not None
+        assert scanner.discovery_port is not None
+        assert scanner.webserver_port is not None
+
+
+def test_scanner_is_ready_on_enter():
+    for _ in range(3):
+        with Scanner() as scanner:
+            assert scanner.is_ready
+
+
+def test_scanner_closes_socket_on_exit():
+    scanner = Scanner()
+    with scanner:
+        pass
+    assert scanner.socket.fileno() == -1  # means closed
+
+    # Repeated closing
+    for _ in range(3):
+        with scanner:
+            pass
+
+
+def test_scanner_supports_reusing_the_context_manager():
+    scanner = Scanner()
+    for _ in range(5):
+        with scanner:
+            assert scanner
+
+
+def test_scanner_creates_new_socket_when_reset():
+    scanner = Scanner()
+    before = scanner.socket
+    scanner._reset_socket()
+    after = scanner.socket
+    assert after != before
+
+
+def test_scanner_offers_a_scan_method(ethernet_gripper):
+
+    # The fixture provides an HMS chip that should
+    # respond to the scanning requests.
+
+    with Scanner() as scanner:
+        grippers = scanner.scan()
+        assert isinstance(grippers, list)
+        assert len(grippers) >= 1
+
+        for gripper in grippers:
+            assert isinstance(gripper, dict)
+            assert isinstance(gripper["host"], str)
+            assert isinstance(gripper["port"], int)
+
+            assert gripper["host"] != ""
+            assert gripper["port"] == 80
+
+
+def test_scan_result_is_empty_without_context_manager():
+    scanner = Scanner()
+    start = time.time()
+    result = scanner.scan()
+    stop = time.time()
+    assert stop - start < 0.1  # unready scan should return immediately
+    assert result == []

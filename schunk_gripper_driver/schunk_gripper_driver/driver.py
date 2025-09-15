@@ -38,6 +38,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     StartJoggingGPE,
     ShowConfiguration,
     ShowGripperSpecification,
+    ScanGrippers,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -51,7 +52,7 @@ from rclpy.service import Service
 from rclpy.publisher import Publisher
 from rclpy.executors import MultiThreadedExecutor, ExternalShutdownException
 from functools import partial
-from schunk_gripper_library.utility import Scheduler
+from schunk_gripper_library.utility import Scheduler, EthernetScanner
 from typing import TypedDict
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rcl_interfaces.msg import SetParametersResult
@@ -77,6 +78,7 @@ class Driver(Node):
     def __init__(self, node_name: str, **kwargs):
         super().__init__(node_name, **kwargs)
         self.grippers: list[Gripper] = []
+        self.ethernet_scanner: EthernetScanner = EthernetScanner()
 
         # Initialization parameters
         self.init_parameters = {
@@ -138,6 +140,11 @@ class Driver(Node):
             Trigger,
             "~/load_previous_configuration",
             self._load_previous_configuration_cb,
+        )
+        self.scan_grippers_srv = self.create_service(
+            ScanGrippers,
+            "~/scan",
+            self._scan_grippers_cb,
         )
         self.add_on_set_parameters_callback(self._param_cb)
 
@@ -376,6 +383,7 @@ class Driver(Node):
         self.destroy_service(self.reset_grippers_srv)
         self.destroy_service(self.show_configuration_srv)
         self.destroy_service(self.load_previous_configuration_srv)
+        self.destroy_service(self.scan_grippers_srv)
 
         if self.headless:
             self.get_logger().debug(
@@ -591,6 +599,11 @@ class Driver(Node):
             "~/load_previous_configuration",
             self._load_previous_configuration_cb,
         )
+        self.scan_grippers_srv = self.create_service(
+            ScanGrippers,
+            "~/scan",
+            self._scan_grippers_cb,
+        )
 
         return TransitionCallbackReturn.SUCCESS
 
@@ -796,6 +809,26 @@ class Driver(Node):
         self, request: Trigger.Request, response: Trigger.Response
     ):
         response.success = self.load_previous_configuration()
+        return response
+
+    def _scan_grippers_cb(
+        self, request: ScanGrippers.Request, response: ScanGrippers.Response
+    ):
+        with self.ethernet_scanner:
+            entries = self.ethernet_scanner.scan()
+
+        for entry in entries:
+            host = entry["host"]
+            port = entry["port"]
+            driver = GripperDriver()
+            if driver.connect(host=host, port=port):
+                cfg = GripperConfig()
+                cfg.host = host
+                cfg.port = port
+                response.connections.append(cfg)
+                response.grippers.append(driver.gripper)
+                driver.disconnect()
+
         return response
 
     def _list_grippers_cb(

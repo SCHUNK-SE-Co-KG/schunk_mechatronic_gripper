@@ -1,0 +1,5 @@
+---
+string[] grippers       # List of grippers currently visible to the driver.
+                        # Each entry shows the gripper's module type.
+
+Gripper[] connections   # Connection details for each entry from above.
