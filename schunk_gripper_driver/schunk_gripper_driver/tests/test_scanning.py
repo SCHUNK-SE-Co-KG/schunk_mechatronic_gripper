@@ -18,6 +18,8 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     ScanGrippers,
 )
 from unittest.mock import patch
+from rclpy.node import Node
+import rclpy
 
 
 def test_driver_has_an_ethernet_scanner(ros2):
@@ -46,3 +48,16 @@ def test_driver_scans_info_from_existing_ethernet_grippers(ros2):
         assert response.grippers[0].startswith("EG")
         assert response.connections[0].host == "0.0.0.0"
         assert response.connections[0].port == 8000
+
+
+@skip_without_gripper
+def test_driver_implements_scan(driver):
+    node = Node("check_scan")
+    client = node.create_client(ScanGrippers, "/schunk/driver/scan")
+    assert client.wait_for_service(timeout_sec=2)
+
+    future = client.call_async(ScanGrippers.Request())
+    rclpy.spin_until_future_complete(node, future)
+
+    # Check that we can call the interface
+    assert future.result()
