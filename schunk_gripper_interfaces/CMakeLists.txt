@@ -13,7 +13,6 @@ find_package(std_msgs REQUIRED)
 rosidl_generate_interfaces(
   ${PROJECT_NAME}
     srv/AddGripper.srv
-    srv/ControlledStop.srv
     srv/Grip.srv
     srv/GripAtPosition.srv
     srv/GripAtPositionWithGPE.srv
@@ -35,6 +34,7 @@ rosidl_generate_interfaces(
     srv/ShowGripperSpecification.srv
     srv/StartJogging.srv
     srv/StartJoggingGPE.srv
+    srv/Stop.srv
     srv/WriteGripperParameter.srv
     msg/ConnectionState.msg
     msg/Gripper.msg
