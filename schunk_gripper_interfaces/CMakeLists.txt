@@ -24,6 +24,7 @@ rosidl_generate_interfaces(
     srv/SoftGripAtPosition.srv
     srv/SoftGripAtPositionGPE.srv
     srv/StrongGripGPE.srv
+    srv/StrongGripAtPositionGPE.srv
     srv/Release.srv
     srv/ScanGrippers.srv
     srv/ShowConfiguration.srv

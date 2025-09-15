@@ -26,6 +26,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     SoftGripAtPosition,
     SoftGripAtPositionGPE,
     StrongGripGPE,
+    StrongGripAtPositionGPE,
 )
 
 
@@ -45,6 +46,7 @@ def test_grip_callback_handles_all_gpe_variants(ros2):
         SoftGripAtPosition,
         SoftGripAtPositionGPE,
         StrongGripGPE,
+        StrongGripAtPositionGPE,
     ]
     for gripper in driver.grippers:
         for service_type in service_types:
@@ -70,6 +72,7 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
             "/soft_grip": None,
             "/soft_grip_at_position": None,
             "/strong_grip": StrongGripGPE,
+            "/strong_grip_at_position": StrongGripAtPositionGPE,
         },
         "EGU_50_N_B": {
             "/grip": Grip,
@@ -77,6 +80,7 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
             "/soft_grip": None,
             "/soft_grip_at_position": None,
             "/strong_grip": None,
+            "/strong_grip_at_position": None,
         },
         "EGK_25_M_B": {
             "/grip": GripGPE,
@@ -84,6 +88,7 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
             "/soft_grip": SoftGripGPE,
             "/soft_grip_at_position": SoftGripAtPositionGPE,
             "/strong_grip": None,
+            "/strong_grip_at_position": None,
         },
         "EGK_25_N_B": {
             "/grip": Grip,
@@ -91,6 +96,7 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
             "/soft_grip": SoftGrip,
             "/soft_grip_at_position": SoftGripAtPosition,
             "/strong_grip": None,
+            "/strong_grip_at_position": None,
         },
     }
     for module, services in module_expectations.items():
