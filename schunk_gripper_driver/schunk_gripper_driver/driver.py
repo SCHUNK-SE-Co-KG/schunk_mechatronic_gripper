@@ -52,7 +52,7 @@ from rclpy.service import Service
 from rclpy.publisher import Publisher
 from rclpy.executors import MultiThreadedExecutor, ExternalShutdownException
 from functools import partial
-from schunk_gripper_library.utility import Scheduler
+from schunk_gripper_library.utility import Scheduler, EthernetScanner
 from typing import TypedDict
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rcl_interfaces.msg import SetParametersResult
@@ -78,6 +78,7 @@ class Driver(Node):
     def __init__(self, node_name: str, **kwargs):
         super().__init__(node_name, **kwargs)
         self.grippers: list[Gripper] = []
+        self.ethernet_scanner: EthernetScanner = EthernetScanner()
 
         # Initialization parameters
         self.init_parameters = {
@@ -813,8 +814,21 @@ class Driver(Node):
     def _scan_grippers_cb(
         self, request: ScanGrippers.Request, response: ScanGrippers.Response
     ):
-        response.grippers = []
-        response.connections = []
+        with self.ethernet_scanner:
+            entries = self.ethernet_scanner.scan()
+
+        for entry in entries:
+            host = entry["host"]
+            port = entry["port"]
+            driver = GripperDriver()
+            if driver.connect(host=host, port=port):
+                cfg = GripperConfig()
+                cfg.host = host
+                cfg.port = port
+                response.connections.append(cfg)
+                response.grippers.append(driver.gripper)
+                driver.disconnect()
+
         return response
 
     def _list_grippers_cb(

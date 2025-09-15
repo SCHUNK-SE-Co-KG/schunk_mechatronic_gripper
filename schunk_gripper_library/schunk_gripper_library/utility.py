@@ -134,14 +134,14 @@ class Scheduler(object):
 
 
 class EthernetScanner(object):
-    def __init__(self):
+    def __init__(self) -> None:
         self.is_ready: bool = False
         self.discovery_port: int = 3250  # HMS standard
         self.webserver_port: int = 80
         self._reset_socket()
 
-    def scan(self) -> list[dict[str, int]]:
-        result: list[dict[str, int]] = []
+    def scan(self) -> list[dict]:
+        result: list[dict] = []
         if not self.is_ready:
             return result
         interfaces = netifaces.interfaces()
