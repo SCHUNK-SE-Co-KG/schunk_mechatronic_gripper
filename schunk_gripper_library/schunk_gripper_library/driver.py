@@ -296,8 +296,7 @@ class Driver(object):
         if not self.set_target_speed(velocity):
             return False
 
-        if is_absolute:
-            trigger_bit = 13
+        trigger_bit = 13
 
         def start():
             self.clear_plc_output()
@@ -497,8 +496,7 @@ class Driver(object):
             )
 
         if isinstance(position_abs, int):
-            if is_absolute:
-                still_to_go = position_abs - self.get_actual_position()
+            still_to_go = position_abs - self.get_actual_position()
             if isinstance(velocity, int) and velocity > 0:
                 return abs(still_to_go) / velocity
             if isinstance(force, int) and force > 0:
