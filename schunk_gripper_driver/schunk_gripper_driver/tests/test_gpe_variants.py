@@ -63,7 +63,7 @@ def test_grip_callback_handles_all_gpe_variants(ros2):
 
 
 @skip_without_gripper
-def test_driver_offers_gpe_specific_grip_services(ros2):
+def test_driver_offers_gpe_specific_services(ros2):
     driver = Driver("driver")
     driver.on_configure(state=None)
 
@@ -75,6 +75,7 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
             "/soft_grip_at_position": None,
             "/strong_grip": StrongGripGPE,
             "/strong_grip_at_position": StrongGripAtPositionGPE,
+            "/move_to_absolute_position": MoveToAbsolutePositionGPE,
         },
         "EGU_50_N_B": {
             "/grip": Grip,
@@ -83,6 +84,7 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
             "/soft_grip_at_position": None,
             "/strong_grip": None,
             "/strong_grip_at_position": None,
+            "/move_to_absolute_position": MoveToAbsolutePosition,
         },
         "EGK_25_M_B": {
             "/grip": GripGPE,
@@ -91,6 +93,7 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
             "/soft_grip_at_position": SoftGripAtPositionGPE,
             "/strong_grip": None,
             "/strong_grip_at_position": None,
+            "/move_to_absolute_position": MoveToAbsolutePositionGPE,
         },
         "EGK_25_N_B": {
             "/grip": Grip,
@@ -99,6 +102,7 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
             "/soft_grip_at_position": SoftGripAtPosition,
             "/strong_grip": None,
             "/strong_grip_at_position": None,
+            "/move_to_absolute_position": MoveToAbsolutePosition,
         },
     }
     for module, services in module_expectations.items():
@@ -138,35 +142,4 @@ def test_move_to_position_callback_handles_all_variants(ros2):
             )
 
     driver.on_deactivate(state=None)
-    driver.on_cleanup(state=None)
-
-
-@skip_without_gripper
-def test_driver_offers_gpe_specific_move_to_absolute_services(ros2):
-    driver = Driver("driver")
-    driver.on_configure(state=None)
-
-    module_expectations = {
-        "EGU_50_M_B": {
-            "/move_to_absolute_position": MoveToAbsolutePositionGPE,
-        },
-        "EGU_50_N_B": {
-            "/move_to_absolute_position": MoveToAbsolutePosition,
-        },
-    }
-
-    for module, services in module_expectations.items():
-        driver.grippers[0]["driver"].module = module
-        driver.on_activate(state=None)
-
-        for srv_suffix, expected_type in services.items():
-            for service in driver.gripper_services:
-                if service.srv_name.endswith(srv_suffix):
-                    if expected_type is not None:
-                        assert service.srv_type == expected_type
-                    else:
-                        assert False, f"{module} should not offer {srv_suffix}"
-
-        driver.on_deactivate(state=None)
-
     driver.on_cleanup(state=None)
