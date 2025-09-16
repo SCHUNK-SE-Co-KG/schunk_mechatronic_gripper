@@ -164,7 +164,6 @@ def test_move_to_absolute_position_uses_gpe_only_when_available():
     driver.disconnect()
 
 
-@pytest.mark.skip
 @skip_without_gripper
 def test_move_to_relative_position():
     test_position = -50000
@@ -177,8 +176,11 @@ def test_move_to_relative_position():
         ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
     ):
         # not connected
-        assert not driver.move_to_relative_position(
-            position=test_position, velocity=test_velocity, use_gpe=test_gpe
+        assert not driver.move_to_position(
+            position=test_position,
+            velocity=test_velocity,
+            use_gpe=test_gpe,
+            is_absolute=False,
         )
 
         # after connection
@@ -186,11 +188,33 @@ def test_move_to_relative_position():
             host=host, port=port, serial_port=serial_port, device_id=12
         )
         assert driver.acknowledge()
-        assert driver.move_to_relative_position(
-            position=test_position, velocity=test_velocity, use_gpe=test_gpe
+        assert driver.move_to_position(
+            position=test_position,
+            velocity=test_velocity,
+            use_gpe=test_gpe,
+            is_absolute=False,
         )
 
         assert driver.disconnect()
+
+
+@skip_without_gripper
+def test_move_to_relative_position_fails_with_invalid_arguments():
+    driver = Driver()
+
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
+        driver.acknowledge()
+        invalid_positions = [0.1, -0.5, "1000", None, 1e12]
+        invalid_velocities = [-5, 1e9, 5.0]
+        for pos in invalid_positions:
+            for vel in invalid_velocities:
+                assert not driver.move_to_position(
+                    position=pos, velocity=vel, is_absolute=False
+                )
+        driver.disconnect()
 
 
 @pytest.mark.skip

@@ -1,0 +1,6 @@
+float32 position  # Relative position in [m]
+
+float32 velocity  # Velocity in [m/s]
+---
+bool success
+string message

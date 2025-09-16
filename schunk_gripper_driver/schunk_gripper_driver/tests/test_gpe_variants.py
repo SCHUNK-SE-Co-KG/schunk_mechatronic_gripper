@@ -29,6 +29,8 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     StrongGripAtPositionGPE,
     MoveToAbsolutePosition,
     MoveToAbsolutePositionGPE,
+    MoveToRelativePosition,
+    MoveToRelativePositionGPE,
 )
 
 
@@ -76,6 +78,7 @@ def test_driver_offers_gpe_specific_services(ros2):
             "/strong_grip": StrongGripGPE,
             "/strong_grip_at_position": StrongGripAtPositionGPE,
             "/move_to_absolute_position": MoveToAbsolutePositionGPE,
+            "/move_to_relative_position": MoveToRelativePositionGPE,
         },
         "EGU_50_N_B": {
             "/grip": Grip,
@@ -85,6 +88,7 @@ def test_driver_offers_gpe_specific_services(ros2):
             "/strong_grip": None,
             "/strong_grip_at_position": None,
             "/move_to_absolute_position": MoveToAbsolutePosition,
+            "/move_to_relative_position": MoveToRelativePosition,
         },
         "EGK_25_M_B": {
             "/grip": GripGPE,
@@ -94,6 +98,7 @@ def test_driver_offers_gpe_specific_services(ros2):
             "/strong_grip": None,
             "/strong_grip_at_position": None,
             "/move_to_absolute_position": MoveToAbsolutePositionGPE,
+            "/move_to_relative_position": MoveToRelativePositionGPE,
         },
         "EGK_25_N_B": {
             "/grip": Grip,
@@ -103,6 +108,7 @@ def test_driver_offers_gpe_specific_services(ros2):
             "/strong_grip": None,
             "/strong_grip_at_position": None,
             "/move_to_absolute_position": MoveToAbsolutePosition,
+            "/move_to_relative_position": MoveToRelativePosition,
         },
     }
     for module, services in module_expectations.items():
@@ -128,17 +134,20 @@ def test_move_to_position_callback_handles_all_variants(ros2):
     driver.on_configure(state=None)
     driver.on_activate(state=None)
 
-    service_types = [
-        MoveToAbsolutePosition,
-        MoveToAbsolutePositionGPE,
-    ]
+    service_type_and_flag = {
+        MoveToAbsolutePosition: True,
+        MoveToAbsolutePositionGPE: True,
+        MoveToRelativePosition: False,
+        MoveToRelativePositionGPE: False,
+    }
+
     for gripper in driver.grippers:
-        for service_type in service_types:
+        for service_type, is_absolute in service_type_and_flag.items():
             driver._move_to_position_cb(
                 request=service_type.Request(),
                 response=service_type.Response(),
                 gripper=gripper,
-                is_absolute=True,
+                is_absolute=is_absolute,
             )
 
     driver.on_deactivate(state=None)
