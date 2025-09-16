@@ -295,7 +295,7 @@ def test_driver_offers_callback_for_move_to_absolute_position(ros2: None):
             request=req,
             response=res,
             gripper=gripper,
-            service_name="move_to_absolute_position",
+            is_absolute=True,
         )
         assert not res.success
 

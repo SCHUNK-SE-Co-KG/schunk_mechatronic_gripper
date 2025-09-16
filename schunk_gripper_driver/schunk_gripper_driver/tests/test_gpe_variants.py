@@ -134,7 +134,7 @@ def test_move_to_position_callback_handles_all_variants(ros2):
                 request=service_type.Request(),
                 response=service_type.Response(),
                 gripper=gripper,
-                service_name=service_type.__name__.lower(),
+                is_absolute=True,
             )
 
     driver.on_deactivate(state=None)

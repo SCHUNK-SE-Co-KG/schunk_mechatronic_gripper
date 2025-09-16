@@ -444,7 +444,7 @@ class Driver(Node):
                         partial(
                             self._move_to_position_cb,
                             gripper=gripper,
-                            service_name=srv_name,
+                            is_absolute=True,
                         ),
                         callback_group=self.gripper_services_cb_group,
                     )
@@ -907,13 +907,12 @@ class Driver(Node):
         request: Any,
         response: Any,
         gripper: Gripper,
-        service_name: str,
+        is_absolute: bool,
     ):
         self.get_logger().debug("---> Move to position")
         position = int(request.position * 1e6)
         velocity = int(request.velocity * 1e6)
         use_gpe = getattr(request, "use_gpe", False)
-        is_absolute = "absolute" in service_name
         scheduler = self.scheduler if self.needs_synchronize(gripper) else None
 
         response.success = gripper["driver"].move_to_position(
