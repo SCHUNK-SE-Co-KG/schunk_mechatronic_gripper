@@ -281,10 +281,11 @@ class Driver(object):
         desired_bits = {"5": cmd_toggle_before ^ 1, "13": 1, "4": 1}
         return self.wait_for_status(bits=desired_bits)
 
-    def move_to_absolute_position(
+    def move_to_position(
         self,
         position: int,
         velocity: int,
+        is_absolute: bool = True,
         use_gpe: bool = False,
         scheduler: Scheduler | None = None,
     ) -> bool:
@@ -295,11 +296,14 @@ class Driver(object):
         if not self.set_target_speed(velocity):
             return False
 
+        if is_absolute:
+            trigger_bit = 13
+
         def start():
             self.clear_plc_output()
             self.send_plc_output()
             cmd_toggle_before = self.get_status_bit(bit=5)
-            self.set_control_bit(bit=13, value=True)
+            self.set_control_bit(bit=trigger_bit, value=True)
             if self.gpe_available():
                 self.set_control_bit(bit=31, value=use_gpe)
             else:
@@ -314,7 +318,9 @@ class Driver(object):
             desired_bits = {"13": 1, "4": 1}
             return self.wait_for_status(bits=desired_bits)
 
-        duration_sec = self.estimate_duration(position_abs=position, velocity=velocity)
+        duration_sec = self.estimate_duration(
+            position_abs=position, is_absolute=is_absolute, velocity=velocity
+        )
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
                 return False
@@ -479,6 +485,7 @@ class Driver(object):
         self,
         release: bool = False,
         position_abs: int | None = None,
+        is_absolute: bool = True,
         velocity: int | None = None,
         force: int = 0,
         outward: bool = False,
@@ -490,7 +497,8 @@ class Driver(object):
             )
 
         if isinstance(position_abs, int):
-            still_to_go = position_abs - self.get_actual_position()
+            if is_absolute:
+                still_to_go = position_abs - self.get_actual_position()
             if isinstance(velocity, int) and velocity > 0:
                 return abs(still_to_go) / velocity
             if isinstance(force, int) and force > 0:

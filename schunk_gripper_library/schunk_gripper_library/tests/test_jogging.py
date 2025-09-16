@@ -15,9 +15,7 @@ class Setup(object):
         min_pos = self.driver.module_parameters["min_pos"]
         self.max_vel = self.driver.module_parameters["max_grp_vel"]
         middle = int(0.5 * (max_pos - min_pos))
-        return self.driver.move_to_absolute_position(
-            position=middle, velocity=self.max_vel
-        )
+        return self.driver.move_to_position(position=middle, velocity=self.max_vel)
 
 
 @skip_without_gripper
@@ -104,7 +102,7 @@ def test_driver_doesnt_start_jogging_with_warnings():
     # Check after jogging into position limits
     almost_open = driver.module_parameters["max_pos"] - 1000
     full_speed = driver.module_parameters["max_vel"]
-    assert driver.move_to_absolute_position(position=almost_open, velocity=full_speed)
+    assert driver.move_to_position(position=almost_open, velocity=full_speed)
     assert driver.start_jogging(velocity=velocity)
     time.sleep(1.0)
     assert not driver.start_jogging(

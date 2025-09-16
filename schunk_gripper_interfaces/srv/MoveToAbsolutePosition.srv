@@ -1,10 +1,6 @@
 float32 position  # Absolute position in [m]
 
 float32 velocity  # Velocity in [m/s]
-
-bool use_gpe      # Whether to activate position maintenance after moving.
-                  # Will only be used when available in the gripper.
-                  # Defaults to False.
 ---
 bool success
 string message
