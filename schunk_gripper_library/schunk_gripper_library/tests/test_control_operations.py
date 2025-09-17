@@ -57,9 +57,10 @@ def test_driver_only_touches_specified_control_bits():
 
 def test_driver_supports_reading_and_writing_target_position():
     driver = Driver()
-    target_pos = 12300  # um
-    driver.set_target_position(target_pos)
-    assert pytest.approx(driver.get_target_position(), rel=1e-3) == target_pos
+    target_positions = [12300, -15001, 1, 0]  # um
+    for target in target_positions:
+        driver.set_target_position(target)
+        assert pytest.approx(driver.get_target_position(), rel=1e-3) == target
 
 
 def test_driver_rejects_invalid_target_position():
