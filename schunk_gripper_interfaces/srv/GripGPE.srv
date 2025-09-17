@@ -1,6 +1,10 @@
 int8 force    # Percentage points of the gripper's max. gripping force.
               # Tolerated values in [50, 100]
 
+bool use_gpe  # Whether to activate grip force and position maintenance.
+              # Will only be used when available in the gripper.
+              # Defaults to False.
+
 bool outward  # Whether to open the gripper for grasping.
               # Defaults to False.
 ---

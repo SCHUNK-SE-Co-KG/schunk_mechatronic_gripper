@@ -18,5 +18,5 @@ http://<gripper-ip>/adi/metadata.json?offset=0&count=300
 ## Data
 Use this script that reads the data directly from the gripper:
 ```bash
-./read_system_parameters.py <gripper-ip>
+./read_gripper_parameters.py <gripper-ip>
 ```

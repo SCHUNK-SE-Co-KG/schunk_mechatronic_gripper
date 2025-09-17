@@ -46,7 +46,16 @@ start_empty = DeclareLaunchArgument(
     description="Whether to drop gripper-specific launch arguments",
 )
 
-args = [host, port, serial_port, device_id, start_empty]
+headless = DeclareLaunchArgument(
+    "headless",
+    default_value="false",
+    description=(
+        "Whether to `configure` and `activate` the driver "
+        "using the last successful configuration"
+    ),
+)
+
+args = [host, port, serial_port, device_id, start_empty, headless]
 
 
 def generate_launch_description():
@@ -64,6 +73,7 @@ def generate_launch_description():
                     {"serial_port": LaunchConfiguration("serial_port")},
                     {"device_id": LaunchConfiguration("device_id")},
                     {"start_empty": LaunchConfiguration("start_empty")},
+                    {"headless": LaunchConfiguration("headless")},
                 ],
                 respawn=True,
                 output="both",

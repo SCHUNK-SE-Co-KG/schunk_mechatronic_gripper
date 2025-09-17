@@ -3,9 +3,9 @@ from threading import Lock
 from pymodbus.client import ModbusSerialClient
 from pymodbus.pdu import ModbusPDU
 import re
-from threading import Thread
+from threading import Thread, Event
 import time
-from httpx import Client, ConnectError, ConnectTimeout
+from httpx import Client, ConnectError, ConnectTimeout, ReadTimeout
 from importlib.resources import files
 from typing import Union
 import json
@@ -13,6 +13,7 @@ from .utility import Scheduler, supports_parity
 from functools import partial
 from pymodbus.logging import Log
 import serial  # type: ignore [import-untyped]
+from pymodbus.exceptions import ModbusIOException
 
 
 class NonExclusiveSerialClient(ModbusSerialClient):
@@ -119,6 +120,9 @@ class Driver(object):
         self.connected: bool = False
         self.polling_thread: Thread = Thread()
         self.update_cycle: float = 0.05  # sec
+        self.update_count: int = 0  # since last connect() call
+        self.disconnect_request: Event = Event()
+        self.reconnect_interval: float = 1.0
 
     def connect(
         self,
@@ -134,6 +138,7 @@ class Driver(object):
             return False
         if self.connected:
             return False
+        self.update_count = 0
 
         # TCP/IP
         if host:
@@ -167,6 +172,7 @@ class Driver(object):
                     baudrate=115200,
                     parity="E" if supports_parity(serial_port) else "N",
                     stopbits=1,
+                    timeout=0.05,
                     trace_connect=None,
                     trace_packet=None,
                     trace_pdu=None,
@@ -204,10 +210,10 @@ class Driver(object):
         return self.connected
 
     def disconnect(self) -> bool:
-        self.connected = False
         self.module = ""
         self.fieldbus = ""
         self.gripper = ""
+        self.disconnect_request.set()
         if self.polling_thread.is_alive():
             self.polling_thread.join()
 
@@ -219,6 +225,7 @@ class Driver(object):
             with self.web_client_lock:
                 self.web_client = None
 
+        self.connected = False
         self.update_module_parameters()
         return True
 
@@ -274,10 +281,11 @@ class Driver(object):
         desired_bits = {"5": cmd_toggle_before ^ 1, "13": 1, "4": 1}
         return self.wait_for_status(bits=desired_bits)
 
-    def move_to_absolute_position(
+    def move_to_position(
         self,
         position: int,
         velocity: int,
+        is_absolute: bool = True,
         use_gpe: bool = False,
         scheduler: Scheduler | None = None,
     ) -> bool:
@@ -288,11 +296,16 @@ class Driver(object):
         if not self.set_target_speed(velocity):
             return False
 
+        if is_absolute:
+            trigger_bit = 13
+        else:
+            trigger_bit = 14
+
         def start():
             self.clear_plc_output()
             self.send_plc_output()
             cmd_toggle_before = self.get_status_bit(bit=5)
-            self.set_control_bit(bit=13, value=True)
+            self.set_control_bit(bit=trigger_bit, value=True)
             if self.gpe_available():
                 self.set_control_bit(bit=31, value=use_gpe)
             else:
@@ -307,7 +320,9 @@ class Driver(object):
             desired_bits = {"13": 1, "4": 1}
             return self.wait_for_status(bits=desired_bits)
 
-        duration_sec = self.estimate_duration(position_abs=position, velocity=velocity)
+        duration_sec = self.estimate_duration(
+            position_abs=position, is_absolute=is_absolute, velocity=velocity
+        )
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
                 return False
@@ -321,29 +336,11 @@ class Driver(object):
                 return False
             return check()
 
-    def move_to_relative_position(
-        self, position: int, velocity: int, use_gpe: bool
-    ) -> bool:
-        if not self.connected:
-            return False
-
-        self.clear_plc_output()
-        self.send_plc_output()
-
-        cmd_toggle_before = self.get_status_bit(bit=5)
-        self.set_control_bit(bit=14, value=True)
-        self.set_control_bit(bit=31, value=use_gpe)
-        self.set_target_position(position)
-        self.set_target_speed(velocity)
-
-        self.send_plc_output()
-        desired_bits = {"5": cmd_toggle_before ^ 1, "13": 1, "4": 1}
-
-        return self.wait_for_status(bits=desired_bits)
-
     def grip(
         self,
         force: int,
+        position: int | None = None,
+        velocity: int | None = None,
         use_gpe: bool = False,
         outward: bool = False,
         scheduler: Scheduler | None = None,
@@ -352,20 +349,35 @@ class Driver(object):
             return False
         if not self.set_gripping_force(force):
             return False
+        if position is not None and not isinstance(position, int):
+            return False
+        if velocity is not None:
+            if not isinstance(velocity, int) or velocity <= 0:
+                return False
+
+        if position is not None:
+            trigger_bit = 16
+        else:
+            trigger_bit = 12
 
         def start() -> bool:
             self.clear_plc_output()
             self.send_plc_output()
 
             cmd_toggle_before = self.get_status_bit(bit=5)
-            self.set_control_bit(bit=12, value=True)
+            self.set_control_bit(bit=trigger_bit, value=True)
             self.set_control_bit(bit=7, value=outward)
             if self.gpe_available():
                 self.set_control_bit(bit=31, value=use_gpe)
             else:
                 self.set_control_bit(bit=31, value=False)
             self.set_gripping_force(force)
-            self.set_target_speed(0)
+            if position is not None:
+                self.set_target_position(position)
+            if velocity is not None:
+                self.set_target_speed(velocity)
+            else:
+                self.set_target_speed(0)
             self.send_plc_output()
             desired_bits = {"5": cmd_toggle_before ^ 1, "3": 0}
             return self.wait_for_status(bits=desired_bits, timeout_sec=0.1)
@@ -374,7 +386,9 @@ class Driver(object):
             desired_bits = {"4": 1, "12": 1}
             return self.wait_for_status(bits=desired_bits)
 
-        duration_sec = self.estimate_duration(force=force, outward=outward)
+        duration_sec = self.estimate_duration(
+            position_abs=position, velocity=velocity, force=force, outward=outward
+        )
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
                 return False
@@ -452,8 +466,9 @@ class Driver(object):
     def estimate_duration(
         self,
         release: bool = False,
-        position_abs: int = 0,
-        velocity: int = 0,
+        position_abs: int | None = None,
+        is_absolute: bool = True,
+        velocity: int | None = None,
         force: int = 0,
         outward: bool = False,
     ) -> float:
@@ -462,12 +477,20 @@ class Driver(object):
                 self.module_parameters["wp_release_delta"]
                 / self.module_parameters["max_vel"]
             )
-        if not isinstance(position_abs, int):
+
+        if isinstance(position_abs, int):
+            if is_absolute:
+                still_to_go = position_abs - self.get_actual_position()
+            else:
+                still_to_go = position_abs
+            if isinstance(velocity, int) and velocity > 0:
+                return abs(still_to_go) / velocity
+            if isinstance(force, int) and force > 0:
+                grip_vel = (force / 100) * self.module_parameters["max_grp_vel"]
+                return abs(still_to_go) / grip_vel
             return 0.0
-        if isinstance(velocity, int) and velocity > 0:
-            still_to_go = position_abs - self.get_actual_position()
-            return abs(still_to_go) / velocity
-        if isinstance(force, int) and force > 0 and force <= 100:
+
+        if isinstance(force, int) and force > 0:
             if outward:
                 still_to_go = (
                     self.module_parameters["max_pos"] - self.get_actual_position()
@@ -476,17 +499,73 @@ class Driver(object):
                 still_to_go = (
                     self.module_parameters["min_pos"] - self.get_actual_position()
                 )
+            if isinstance(velocity, int) and velocity > 0:
+                return abs(still_to_go) / velocity
             ratio = force / 100
             return abs(still_to_go) / (ratio * self.module_parameters["max_grp_vel"])
         return 0.0
+
+    def start_jogging(
+        self, velocity: int, use_gpe: bool = False, scheduler: Scheduler | None = None
+    ) -> bool:
+        if not self.connected:
+            return False
+
+        def do() -> bool:
+            still_jogging = False
+            if self.get_control_bit(bit=8) == 1 or self.get_control_bit(bit=9) == 1:
+                still_jogging = True
+
+            self.clear_plc_output()
+            self.send_plc_output()
+            cmd_toggle_before = self.get_status_bit(bit=5)
+
+            if not self.set_target_speed(abs(velocity)):
+                return False
+            if velocity >= 0:
+                self.set_control_bit(bit=9, value=True)
+            else:
+                self.set_control_bit(bit=8, value=True)
+            if use_gpe:
+                self.set_control_bit(bit=31, value=self.gpe_available())
+            self.send_plc_output()
+
+            if still_jogging:
+                self.receive_plc_input()
+                if self.get_status_bit(bit=6) == 0:
+                    return True
+
+            desired_bits = {"5": cmd_toggle_before ^ 1, "6": 0}
+            return self.wait_for_status(bits=desired_bits)
+
+        if scheduler:
+            return scheduler.execute(func=partial(do)).result()
+        else:
+            return do()
+
+    def stop_jogging(self, scheduler: Scheduler | None = None) -> bool:
+        if not self.connected:
+            return False
+
+        def do() -> bool:
+            self.clear_plc_output()
+            self.send_plc_output()
+            return True
+
+        if scheduler:
+            return scheduler.execute(func=partial(do)).result()
+        else:
+            return do()
 
     def receive_plc_input(self) -> bool:
         with self.input_buffer_lock:
             data = self.read_module_parameter(self.plc_input)
             if data:
                 self.plc_input_buffer = data
-                return True
-        return False
+                self.connected = True
+            else:
+                self.connected = False
+            return self.connected
 
     def send_plc_output(self) -> bool:
         with self.output_buffer_lock:
@@ -501,6 +580,19 @@ class Driver(object):
         if keys[2] == "M":
             return True
         return False
+
+    def get_variant(self) -> str:
+        if not self.module:
+            return ""
+        if self.module not in self.valid_module_types.values():
+            return ""
+        if self.module.startswith("EGU"):
+            return "EGU"
+        elif self.module.startswith("EGK"):
+            return "EGK"
+        elif self.module.startswith("EZU"):
+            return "EZU"
+        return ""
 
     def update_module_parameters(self) -> bool:
 
@@ -549,24 +641,31 @@ class Driver(object):
 
         if self.mb_client and self.mb_client.connected:
             with self.mb_client_lock:
-                pdu = self.mb_client.read_holding_registers(
-                    address=int(param, 16) - 1,
-                    count=int(self.readable_parameters[param]["registers"]),
-                    slave=self.mb_device_id,
-                    no_response_expected=False,
-                )
+                try:
+                    pdu = self.mb_client.read_holding_registers(
+                        address=int(param, 16) - 1,
+                        count=int(self.readable_parameters[param]["registers"]),
+                        slave=self.mb_device_id,
+                        no_response_expected=False,
+                    )
+                except ModbusIOException:
+                    return result
+
             # Parse each 2-byte register,
             # reverting pymodbus' internal big endian decoding.
             if not pdu.isError():
                 for reg in pdu.registers:
                     result.extend(reg.to_bytes(2, byteorder="big"))
 
-        if self.web_client and self.connected:
+        if self.web_client:
             params = {"inst": param, "count": "1"}
             with self.web_client_lock:
-                response = self.web_client.get(
-                    f"http://{self.host}:{self.port}/adi/data.json", params=params
-                )
+                try:
+                    response = self.web_client.get(
+                        f"http://{self.host}:{self.port}/adi/data.json", params=params
+                    )
+                except (ReadTimeout, ConnectError, ConnectTimeout):
+                    return result
             if response.is_success:
                 result = bytearray(bytes.fromhex(response.json()[0]))
 
@@ -765,8 +864,6 @@ class Driver(object):
         with self.output_buffer_lock:
             if not isinstance(target_pos, int):
                 return False
-            if target_pos < 0:
-                return False
             data = bytes(struct.pack("i", target_pos))
             if self.fieldbus == "PN":
                 data = data[::-1]
@@ -803,10 +900,6 @@ class Driver(object):
         with self.output_buffer_lock:
             if not isinstance(gripping_force, int):
                 return False
-            if gripping_force <= 0:
-                return False
-            if gripping_force > 100:
-                return False
             data = bytes(struct.pack("i", gripping_force))
             if self.fieldbus == "PN":
                 data = data[::-1]
@@ -841,9 +934,23 @@ class Driver(object):
             return True
 
     def _module_update(self, update_cycle: float) -> None:
-        while self.connected:
-            self.receive_plc_input()
-            time.sleep(update_cycle)
+        self.disconnect_request.clear()
+        fails = 0
+        next_time = time.perf_counter()
+        while not self.disconnect_request.is_set():
+            if self.receive_plc_input():
+                self.connected = True
+                self.update_count += 1
+                fails = 0
+                time.sleep(max(0, next_time - time.perf_counter()))
+                next_time += update_cycle
+            else:
+                self.connected = False
+                fails += 1
+                if fails < 3:
+                    time.sleep(update_cycle)
+                else:
+                    time.sleep(self.reconnect_interval)
 
     def _trace_packet(self, sending: bool, data: bytes) -> bytes:
         txt = "REQUEST stream" if sending else "RESPONSE stream"

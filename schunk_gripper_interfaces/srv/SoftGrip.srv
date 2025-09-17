@@ -3,6 +3,9 @@ int8 force    # Percentage points of the gripper's max. gripping force.
 
 bool outward  # Whether to open the gripper for grasping.
               # Defaults to False.
+
+float32 velocity # Speed for the gripping motion in [m/s].
+                 # Defaults to 0.
 ---
 bool success
 string message

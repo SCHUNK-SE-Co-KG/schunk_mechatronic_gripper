@@ -1,4 +1,4 @@
-from threading import Thread
+from threading import Thread, Timer
 import time
 from importlib.resources import files
 import json
@@ -75,7 +75,9 @@ class Dummy(object):
             raise ValueError("Unknown parameter set")
 
         self.starttime = time.time()
-        self.thread = Thread(target=self._run)
+        self.reachable = True
+        self.jogging_thread = Thread()
+        self.uptime_thread = Thread(target=self._run)
         self.running = False
         self.done = False
         self.plc_input = "0x0040"
@@ -114,12 +116,12 @@ class Dummy(object):
     def start(self) -> None:
         if self.running:
             return
-        self.thread.start()
+        self.uptime_thread.start()
         self.running = True
 
     def stop(self) -> None:
         self.done = True
-        self.thread.join()
+        self.uptime_thread.join()
         self.running = False
 
     def _run(self) -> None:
@@ -128,6 +130,16 @@ class Dummy(object):
             self.set_system_uptime(int(elapsed))
             time.sleep(1)
         print("Done")
+
+    def handle_events(self, events: dict) -> bool:
+        if "lose_connection_sec" in events:
+            self.reachable = False
+
+            def reset() -> None:
+                self.reachable = True
+
+            Timer(interval=events["lose_connection_sec"], function=reset).start()
+        return True
 
     def acknowledge(self) -> None:
         self.set_status_bit(bit=0, value=True)
@@ -151,7 +163,7 @@ class Dummy(object):
             self.set_actual_speed(actual_speed)
             time.sleep(0.01)
 
-    def post(self, msg: dict) -> dict:
+    def update(self, msg: dict) -> dict:
         self.data[msg["inst"]] = [msg["value"]]
         if msg["inst"] == self.plc_output:
             self.plc_output_buffer = bytearray(bytes.fromhex(msg["value"]))
@@ -443,6 +455,58 @@ class Dummy(object):
             self.set_status_bit(bit=4, value=True)
             self.set_status_bit(bit=31, value=True)
             self.clear_plc_output()
+            return
+
+        # Jogging
+        def keep_jogging(negative: bool = False) -> None:
+            if negative:
+                target_pos = self.min_position
+                jog_bit = 8
+            else:
+                target_pos = self.max_position
+                jog_bit = 9
+
+            motion = LinearMotion(
+                initial_pos=self.get_actual_position(),
+                initial_speed=self.get_actual_speed(),
+                target_pos=target_pos,
+                target_speed=self.get_target_speed(),
+            )
+            start = time.time()
+            actual_pos, actual_speed = motion.sample(0)
+            (
+                print("Start negative jogging")
+                if negative
+                else print("Start positive jogging")
+            )
+            while (
+                self.get_control_bit(bit=jog_bit) == 1
+                and abs(target_pos - actual_pos) > 1
+            ):  # um
+                t = time.time() - start
+                actual_pos, actual_speed = motion.sample(t)
+                self.set_actual_position(actual_pos)
+                self.set_actual_speed(actual_speed)
+                time.sleep(0.01)
+            (
+                print("Stop negative jogging")
+                if negative
+                else print("Stop positive jogging")
+            )
+
+        if self.get_control_bit(bit=9) == 1 and self.get_control_bit(bit=8) == 1:
+            return
+        if self.get_control_bit(bit=9) == 1:
+            if not self.jogging_thread.is_alive():
+                self.jogging_thread = Thread(target=keep_jogging, daemon=True)
+                self.jogging_thread.start()
+            return
+        if self.get_control_bit(bit=8) == 1:
+            if not self.jogging_thread.is_alive():
+                self.jogging_thread = Thread(
+                    target=keep_jogging, kwargs={"negative": True}, daemon=True
+                )
+                self.jogging_thread.start()
             return
 
         self.clear_plc_output()

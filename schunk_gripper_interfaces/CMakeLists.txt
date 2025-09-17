@@ -15,10 +15,26 @@ rosidl_generate_interfaces(
     srv/AddGripper.srv
     srv/ListGrippers.srv
     srv/MoveToAbsolutePosition.srv
+    srv/MoveToAbsolutePositionGPE.srv
+    srv/MoveToRelativePosition.srv
+    srv/MoveToRelativePositionGPE.srv
     srv/Grip.srv
+    srv/GripGPE.srv
+    srv/GripAtPosition.srv
+    srv/GripAtPositionGPE.srv
+    srv/SoftGrip.srv
+    srv/SoftGripGPE.srv
+    srv/SoftGripAtPosition.srv
+    srv/SoftGripAtPositionGPE.srv
+    srv/StrongGripGPE.srv
+    srv/StrongGripAtPositionGPE.srv
     srv/Release.srv
+    srv/ScanGrippers.srv
     srv/ShowConfiguration.srv
     srv/ShowGripperSpecification.srv
+    srv/StartJogging.srv
+    srv/StartJoggingGPE.srv
+    msg/ConnectionState.msg
     msg/Gripper.msg
     msg/GripperState.msg
     msg/GripperSpec.msg

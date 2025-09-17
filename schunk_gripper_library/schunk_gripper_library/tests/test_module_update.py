@@ -1,0 +1,117 @@
+from schunk_gripper_library.driver import Driver
+from schunk_gripper_library.utility import skip_without_gripper
+import time
+import pytest
+
+
+@skip_without_gripper
+def test_driver_runs_receiving_background_thread():
+    driver = Driver()
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        assert not driver.polling_thread.is_alive()
+        driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
+        assert driver.polling_thread.is_alive()
+        time.sleep(1)  # Let it run a little
+        driver.disconnect()
+        assert not driver.polling_thread.is_alive()
+
+
+@skip_without_gripper
+def test_driver_stores_specified_update_cycle():
+    driver = Driver()
+
+    # Store for successful connects
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        update_cycle = 0.1
+        assert driver.connect(
+            host=host,
+            port=port,
+            serial_port=serial_port,
+            device_id=12,
+            update_cycle=update_cycle,
+        )
+        assert pytest.approx(driver.update_cycle) == update_cycle
+        driver.disconnect()
+
+    # Don't store when connect fails
+    assert not driver.connect(update_cycle=42.123)
+    assert pytest.approx(driver.update_cycle) == update_cycle  # from last connect
+
+
+@skip_without_gripper
+def test_driver_skips_background_thread_without_update_cycle():
+    driver = Driver()
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        for _ in range(3):
+            as_before = driver.update_cycle
+            driver.connect(
+                host=host,
+                port=port,
+                serial_port=serial_port,
+                device_id=12,
+                update_cycle=None,
+            )
+            assert not driver.polling_thread.is_alive()
+            assert pytest.approx(driver.update_cycle) == as_before
+            driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_counts_module_updates():
+    driver = Driver()
+    assert driver.update_count == 0
+
+    # Starts counting after successful connect
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        driver.connect(
+            host=host,
+            port=port,
+            serial_port=serial_port,
+            device_id=12,
+            update_cycle=0.1,
+        )
+        driver.disconnect()
+
+    time.sleep(1.0)
+    assert driver.update_count > 0
+
+    # Resets counter after new connect calls
+    assert not driver.connect()
+    assert driver.update_count == 0
+
+
+@skip_without_gripper
+def test_driver_updates_with_specified_cycle():
+    driver = Driver()
+    duration = 1.0
+
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        update_cycles = [0.1, 0.05, 0.01]
+        for cycle in update_cycles:
+            driver.connect(
+                host=host,
+                port=port,
+                serial_port=serial_port,
+                device_id=12,
+                update_cycle=cycle,
+            )
+
+            time.sleep(duration)
+            driver.disconnect()
+            expected_count = int(duration / cycle)
+
+            # Slightly more updates is ok here to compensate
+            # for rounding errors with low cycles.
+            assert (
+                driver.update_count >= expected_count
+            ), f"with update cycle: {cycle} on host: {host}"

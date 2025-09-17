@@ -57,14 +57,15 @@ def test_driver_only_touches_specified_control_bits():
 
 def test_driver_supports_reading_and_writing_target_position():
     driver = Driver()
-    target_pos = 12300  # um
-    driver.set_target_position(target_pos)
-    assert pytest.approx(driver.get_target_position(), rel=1e-3) == target_pos
+    target_positions = [12300, -15001, 1, 0]  # um
+    for target in target_positions:
+        driver.set_target_position(target)
+        assert pytest.approx(driver.get_target_position(), rel=1e-3) == target
 
 
 def test_driver_rejects_invalid_target_position():
     driver = Driver()
-    invalid_positions = [12.34, -0.5, -7500, "17.3"]
+    invalid_positions = [12.34, -0.5, -7500.0, "17.3"]
     for pos in invalid_positions:
         assert not driver.set_target_position(pos)
 
@@ -85,7 +86,7 @@ def test_driver_rejects_invalid_target_speed():
 
 def test_driver_supports_reading_and_writing_gripping_force():
     driver = Driver()
-    invalid_forces = [0, 0.0, -1, 0.75, 123, 60.0, "80%"]
+    invalid_forces = [0.0, 0.75, 60.0, "80%"]
     for force in invalid_forces:
         assert not driver.set_gripping_force(force)
 

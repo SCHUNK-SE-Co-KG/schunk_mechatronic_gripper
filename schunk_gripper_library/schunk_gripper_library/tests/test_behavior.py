@@ -68,7 +68,7 @@ def test_all_gripper_commands_run_with_a_scheduler():
     min_pos = driver.module_parameters["min_pos"]
     half = int(0.5 * (max_pos - min_pos))
     max_vel = driver.module_parameters["max_vel"]
-    assert driver.move_to_absolute_position(
+    assert driver.move_to_position(
         position=half, velocity=max_vel, scheduler=scheduler
     ), f"driver status: {driver.get_status_diagnostics()}"
 
@@ -83,6 +83,11 @@ def test_all_gripper_commands_run_with_a_scheduler():
     assert not driver.release(
         scheduler=scheduler
     ), f"driver status: {driver.get_status_diagnostics()}"
+
+    # Jogging
+    assert driver.acknowledge(scheduler=scheduler)
+    assert driver.start_jogging(velocity=driver.module_parameters["max_grp_vel"])
+    assert driver.stop_jogging()
 
     driver.disconnect()
     scheduler.stop()
@@ -108,13 +113,13 @@ def test_move_to_absolute_position_fails_with_invalid_arguments():
             {"position": 1000, "velocity": 0.0},
         ]
         for args in combinations:
-            assert not driver.move_to_absolute_position(**args)
+            assert not driver.move_to_position(**args)
         driver.disconnect()
 
 
 def test_move_to_absolute_position_fails_when_not_connected():
     driver = Driver()
-    assert not driver.move_to_absolute_position(position=100, velocity=100)
+    assert not driver.move_to_position(position=100, velocity=100)
 
 
 @skip_without_gripper
@@ -137,7 +142,7 @@ def test_move_to_absolute_position_succeeds_with_valid_arguments():
             {"position": half, "velocity": max_vel},
         ]
         for args in combinations:
-            assert driver.move_to_absolute_position(
+            assert driver.move_to_position(
                 **args
             ), f"host: {host}, module status: {driver.get_status_diagnostics()}"
         driver.disconnect()
@@ -155,16 +160,13 @@ def test_move_to_absolute_position_uses_gpe_only_when_available():
     min_pos = driver.module_parameters["min_pos"]
     half = int(0.5 * (max_pos - min_pos))
     max_vel = driver.module_parameters["max_vel"]
-    assert driver.move_to_absolute_position(
-        position=half, velocity=max_vel, use_gpe=True
-    )
+    assert driver.move_to_position(position=half, velocity=max_vel, use_gpe=True)
     driver.disconnect()
 
 
-@pytest.mark.skip
 @skip_without_gripper
 def test_move_to_relative_position():
-    test_position = -50000
+    test_position = -5000
     test_velocity = 73000
     test_gpe = True
 
@@ -174,8 +176,11 @@ def test_move_to_relative_position():
         ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
     ):
         # not connected
-        assert not driver.move_to_relative_position(
-            position=test_position, velocity=test_velocity, use_gpe=test_gpe
+        assert not driver.move_to_position(
+            position=test_position,
+            velocity=test_velocity,
+            use_gpe=test_gpe,
+            is_absolute=False,
         )
 
         # after connection
@@ -183,11 +188,33 @@ def test_move_to_relative_position():
             host=host, port=port, serial_port=serial_port, device_id=12
         )
         assert driver.acknowledge()
-        assert driver.move_to_relative_position(
-            position=test_position, velocity=test_velocity, use_gpe=test_gpe
+        assert driver.move_to_position(
+            position=test_position,
+            velocity=test_velocity,
+            use_gpe=test_gpe,
+            is_absolute=False,
         )
 
         assert driver.disconnect()
+
+
+@skip_without_gripper
+def test_move_to_relative_position_fails_with_invalid_arguments():
+    driver = Driver()
+
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
+        driver.acknowledge()
+        invalid_positions = [0.1, -0.5, "1000", None, 1e12]
+        invalid_velocities = [-5, 1e9, 5.0]
+        for pos in invalid_positions:
+            for vel in invalid_velocities:
+                assert not driver.move_to_position(
+                    position=pos, velocity=vel, is_absolute=False
+                )
+        driver.disconnect()
 
 
 @pytest.mark.skip
@@ -208,74 +235,6 @@ def test_stop():
 
         assert driver.stop()
         assert driver.disconnect()
-
-
-def test_grip_fails_when_not_connected():
-    driver = Driver()
-    assert not driver.grip(force=100)
-
-
-@skip_without_gripper
-def test_grip_fails_with_invalid_arguments():
-    driver = Driver()
-    for host, port, serial_port in zip(
-        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
-    ):
-        # Invalid arguments
-        driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
-        driver.acknowledge()
-        invalid_forces = [0.1, -0.1, 170, 75.0]
-        for force in invalid_forces:
-            assert not driver.grip(force)
-        driver.disconnect()
-
-
-@skip_without_gripper
-def test_grip_works_with_valid_arguments():
-    driver = Driver()
-
-    # Only web dummy for now.
-    # The BKS simulator will always fail.
-    driver.connect(host="0.0.0.0", port=8000)
-    driver.acknowledge()
-    combinations = [
-        {"force": 75, "outward": True},
-        {"force": 55, "outward": False},
-        {"force": 99, "outward": True},
-    ]
-    for args in combinations:
-        assert driver.grip(**args)
-    driver.disconnect()
-
-
-@skip_without_gripper
-def test_grip_moves_as_expected_with_the_outward_argument():
-    driver = Driver()
-
-    # Check that gripper's jaws moves in the right directions.
-    driver.connect(host="0.0.0.0", port=8000)
-    max_pos = driver.module_parameters["max_pos"]
-    min_pos = driver.module_parameters["min_pos"]
-    middle = int(0.5 * (max_pos - min_pos))
-
-    assert driver.acknowledge()
-    driver.grip(force=100, outward=True)
-    assert driver.get_actual_position() > middle
-
-    assert driver.acknowledge()
-    driver.grip(force=100, outward=False)
-    assert driver.get_actual_position() < middle
-
-    driver.disconnect()
-
-
-@skip_without_gripper
-def test_grip_fails_when_no_workpiece_detected():
-    driver = Driver()
-    driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
-    driver.acknowledge()
-    assert not driver.grip(force=75, outward=True)
-    driver.disconnect()
 
 
 def test_release_fails_when_not_connected():

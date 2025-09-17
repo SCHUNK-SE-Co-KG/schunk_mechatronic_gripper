@@ -3,6 +3,8 @@ int8 force    # Percentage points of the gripper's max. gripping force.
 
 bool outward  # Whether to open the gripper for grasping.
               # Defaults to False.
+
+float32 at_position  # Grip at a specific position in [m]
 ---
 bool success
 string message

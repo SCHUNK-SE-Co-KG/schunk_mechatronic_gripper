@@ -8,6 +8,9 @@ from httpx import Client, ConnectTimeout, ConnectError
 import pytest
 import os
 import termios
+from socket import socket as Socket
+import socket
+import netifaces
 
 
 def supports_parity(serial_port: str) -> bool:
@@ -128,6 +131,72 @@ class Scheduler(object):
             if task.future:
                 task.future.set_result(result)
             self.tasks.task_done()
+
+
+class EthernetScanner(object):
+    def __init__(self) -> None:
+        self.is_ready: bool = False
+        self.discovery_port: int = 3250  # HMS standard
+        self.webserver_port: int = 80
+        self._reset_socket()
+
+    def scan(self) -> list[dict]:
+        result: list[dict] = []
+        if not self.is_ready:
+            return result
+        interfaces = netifaces.interfaces()
+        interfaces = list(filter(lambda iface: iface.startswith("eth"), interfaces))
+        AF_INET = netifaces.InterfaceType.AF_INET
+        AF_PACKET = netifaces.InterfaceType.AF_PACKET
+
+        for iface in interfaces:
+            addresses = netifaces.ifaddresses(iface)
+
+            if AF_INET in addresses and AF_PACKET in addresses:
+                broadcast_ip = addresses[AF_INET][0].get("broadcast", "255.255.255.255")
+                mac_addr = addresses[AF_PACKET][0]["addr"].replace(":", "")
+                message = (
+                    bytes.fromhex("c1ab")
+                    + bytes.fromhex("ff" * 6)
+                    + bytes.fromhex(mac_addr)
+                    + bytes.fromhex("00" * 4)
+                )
+                try:
+                    self.socket.sendto(message, (broadcast_ip, self.discovery_port))
+                    try:
+                        while True:
+                            response, addr = self.socket.recvfrom(1024)
+                            if response == message:  # it's me
+                                continue
+                            result.append(
+                                {"host": addr[0], "port": self.webserver_port}
+                            )
+                    except socket.timeout:
+                        pass
+                except Exception as e:
+                    print(f"Error on {iface}: {e}")
+
+        return result
+
+    def __enter__(self) -> "EthernetScanner":
+        if self.socket.fileno() == -1:  # already closed once
+            self._reset_socket()
+        self.socket.bind(("", self.discovery_port))  # listen on all local interfaces
+        self.is_ready = True
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        try:
+            self.socket.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        self.socket.close()
+
+    def _reset_socket(self) -> None:
+        self.socket: Socket = Socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.socket.settimeout(1.0)
 
 
 def gripper_available() -> bool:

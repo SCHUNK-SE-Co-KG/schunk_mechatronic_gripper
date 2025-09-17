@@ -20,8 +20,11 @@ from std_srvs.srv import Trigger
 from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     AddGripper,
     MoveToAbsolutePosition,
+    MoveToRelativePosition,
     Grip,
     Release,
+    StartJogging,
+    StartJoggingGPE,
     ShowGripperSpecification,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
@@ -129,26 +132,38 @@ def test_driver_manages_publishers_for_each_gripper(ros2: None):
 
 
 @skip_without_gripper
-def test_driver_manages_two_timers_for_all_grippers(ros2: None):
+def test_driver_manages_two_threads_for_all_grippers(ros2: None):
     driver = Driver("driver")
 
-    assert driver.joint_states_timer is not None
-    assert driver.gripper_states_timer is not None
+    def both_threads_alive() -> bool:
+        return (
+            driver.joint_states_thread.is_alive()
+            and driver.gripper_states_thread.is_alive()
+        )
 
-    # Check that we re-use the same timers during lifetime
-    initial_joints_timer = driver.joint_states_timer
-    initial_states_timer = driver.gripper_states_timer
-    for _ in range(3):
+    def no_thread_alive() -> bool:
+        return (
+            not driver.joint_states_thread.is_alive()
+            and not driver.gripper_states_thread.is_alive()
+        )
+
+    for run in range(3):
+        assert no_thread_alive()
+
         driver.on_configure(state=None)
+        assert no_thread_alive()
+
         driver.on_activate(state=None)
+        assert both_threads_alive(), f"run: {run}"
+
         driver.on_deactivate(state=None)
+        assert no_thread_alive()
+
         driver.on_cleanup(state=None)
-        assert driver.joint_states_timer == initial_joints_timer
-        assert driver.gripper_states_timer == initial_states_timer
+        assert no_thread_alive()
 
     driver.on_shutdown(state=None)
-    assert driver.joint_states_timer.is_canceled()
-    assert driver.gripper_states_timer.is_canceled()
+    assert no_thread_alive()
 
 
 def test_driver_checks_if_grippers_need_synchronization(ros2: None):
@@ -191,6 +206,56 @@ def test_driver_checks_if_grippers_need_synchronization(ros2: None):
         assert not driver.needs_synchronize(gripper)
 
 
+def test_driver_doesnt_synchronize_empty_serial_ports(ros2):
+    driver = Driver("driver")
+    assert driver.reset_grippers()
+    assert driver.add_gripper(host="192.168.0.2", port=8000)
+
+    other = Gripper(
+        {
+            "host": "192.168.0.3",
+            "port": 8000,
+            "serial_port": "",
+            "device_id": 0,
+            "driver": GripperDriver(),
+            "gripper_id": "",
+        }
+    )
+    driver.grippers.append(other)
+    assert not driver.needs_synchronize(other)
+
+
+def test_driver_synchronizes_ethernet_grippers_with_nonempty_serial_ports(ros2):
+    driver = Driver("driver")
+    assert driver.reset_grippers()
+
+    one = Gripper(
+        {
+            "host": "192.168.0.2",
+            "port": 8000,
+            "serial_port": "this will allow to run Ethernet grippers with a scheduler",
+            "device_id": 0,
+            "driver": GripperDriver(),
+            "gripper_id": "",
+        }
+    )
+    driver.grippers.append(one)
+    two = Gripper(
+        {
+            "host": "192.168.0.3",
+            "port": 8000,
+            "serial_port": "this will allow to run Ethernet grippers with a scheduler",
+            "device_id": 0,
+            "driver": GripperDriver(),
+            "gripper_id": "",
+        }
+    )
+    driver.grippers.append(two)
+
+    assert driver.needs_synchronize(one)
+    assert driver.needs_synchronize(two)
+
+
 @skip_without_gripper
 def test_driver_offers_callbacks_for_acknowledge_and_fast_stop(ros2: None):
     driver = Driver("driver")
@@ -216,19 +281,27 @@ def test_driver_offers_callbacks_for_acknowledge_and_fast_stop(ros2: None):
 
 
 @skip_without_gripper
-def test_driver_offers_callback_for_move_to_absolute_position(ros2: None):
+def test_driver_offers_callback_for_move_to_position(ros2: None):
     driver = Driver("driver")
     driver.on_configure(state=None)
     driver.on_activate(state=None)
 
     # Check if we can call the interface.
     # It will fail with an empty request, but that's ok.
-    req = MoveToAbsolutePosition.Request()
-    res = MoveToAbsolutePosition.Response()
-    for idx, _ in enumerate(driver.grippers):
-        gripper = driver.grippers[idx]
-        driver._move_to_absolute_position_cb(request=req, response=res, gripper=gripper)
-        assert not res.success
+
+    types = [MoveToAbsolutePosition, MoveToRelativePosition]
+    args = [True, False]
+
+    for service_type, arg in zip(types, args):
+        for idx, _ in enumerate(driver.grippers):
+            gripper = driver.grippers[idx]
+            res = driver._move_to_position_cb(
+                request=service_type.Request(),
+                response=service_type.Response(),
+                gripper=gripper,
+                is_absolute=arg,
+            )
+            assert not res.success
 
     driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
@@ -267,6 +340,33 @@ def test_driver_offers_callback_for_release(ros2: None):
         driver._release_cb(request=req, response=res, gripper=gripper)
         assert not res.success
         assert res.message != ""
+
+    driver.on_deactivate(state=None)
+    driver.on_cleanup(state=None)
+
+
+@skip_without_gripper
+def test_driver_offers_callbacks_for_start_and_stop_jogging(ros2: None):
+    driver = Driver("driver")
+    driver.on_configure(state=None)
+    driver.on_activate(state=None)
+
+    requests = [StartJogging.Request(), StartJoggingGPE.Request()]
+    responses = [StartJogging.Response(), StartJoggingGPE.Response()]
+
+    # Check if we can call the interface.
+    for req, res in zip(requests, responses):
+        for idx, _ in enumerate(driver.grippers):
+
+            # Start
+            gripper = driver.grippers[idx]
+            req.velocity = 42.0
+            driver._start_jogging_cb(request=req, response=res, gripper=gripper)
+
+            # Stop
+            req = Trigger.Request()
+            res = Trigger.Response()
+            driver._stop_jogging_cb(request=req, response=res, gripper=gripper)
 
     driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
@@ -463,9 +563,9 @@ def test_driver_uses_separate_callback_group_for_publishers(ros2: None):
         for handler in publisher.event_handlers:
             assert handler.callback_group != driver.default_callback_group
 
-    # Timers
-    assert driver.joint_states_timer.callback_group != driver.default_callback_group
-    assert driver.gripper_states_timer.callback_group != driver.default_callback_group
+    # Connection state
+    for handler in driver.connection_state_publisher.event_handlers:
+        assert handler.callback_group != driver.default_callback_group
 
     driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
@@ -490,35 +590,12 @@ def test_publishing_calls_are_safe_without_publishers(ros2):
     # orphaned publishing callbacks after `on_deactivate`.
     assert driver.joint_state_publishers == {}
     assert driver.gripper_state_publishers == {}
-    driver._publish_joint_states()
-    driver._publish_gripper_states()
+    Thread(target=driver._publish_joint_states, daemon=True).start()
+    Thread(target=driver._publish_gripper_states, daemon=True).start()
+    time.sleep(1.0)
+    driver.joint_states_stop.set()
+    driver.gripper_states_stop.set()
 
-    driver.on_cleanup(state=None)
-
-
-@skip_without_gripper
-def test_timer_callbacks_dont_collide_with_lifecycle_transitions(ros2):
-    driver = Driver("test_timer_collisions")
-    driver.on_configure(state=None)
-
-    # Mimic the timers' callbacks by explicitly calling the publish methods
-    done = False
-
-    def stay_busy() -> None:
-        while not done:
-            driver._publish_joint_states()
-            driver._publish_gripper_states()
-
-    timer_thread = Thread(target=stay_busy)
-    timer_thread.start()
-
-    start = time.time()
-    while time.time() < start + 2.0:
-        driver.on_activate(state=None)
-        driver.on_deactivate(state=None)
-    done = True
-
-    timer_thread.join()
     driver.on_cleanup(state=None)
 
 
@@ -544,3 +621,11 @@ def test_driver_uses_separate_callback_group_for_gripper_services(ros2: None):
 
     driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
+
+
+def test_driver_uses_a_dedicated_thread_for_connection_status(ros2):
+    driver = Driver("driver")
+    assert driver.connection_status_thread.is_alive()
+
+    driver.on_shutdown(state=None)
+    assert not driver.connection_status_thread.is_alive()
