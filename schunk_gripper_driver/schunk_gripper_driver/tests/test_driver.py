@@ -281,48 +281,27 @@ def test_driver_offers_callbacks_for_acknowledge_and_fast_stop(ros2: None):
 
 
 @skip_without_gripper
-def test_driver_offers_callback_for_move_to_absolute_position(ros2: None):
+def test_driver_offers_callback_for_move_to_position(ros2: None):
     driver = Driver("driver")
     driver.on_configure(state=None)
     driver.on_activate(state=None)
 
     # Check if we can call the interface.
     # It will fail with an empty request, but that's ok.
-    req = MoveToAbsolutePosition.Request()
-    res = MoveToAbsolutePosition.Response()
-    for idx, _ in enumerate(driver.grippers):
-        gripper = driver.grippers[idx]
-        driver._move_to_position_cb(
-            request=req,
-            response=res,
-            gripper=gripper,
-            is_absolute=True,
-        )
-        assert not res.success
 
-    driver.on_deactivate(state=None)
-    driver.on_cleanup(state=None)
+    types = [MoveToAbsolutePosition, MoveToRelativePosition]
+    args = [True, False]
 
-
-@skip_without_gripper
-def test_driver_offers_callback_for_move_to_relative_position(ros2: None):
-    driver = Driver("driver")
-    driver.on_configure(state=None)
-    driver.on_activate(state=None)
-
-    # Check if we can call the interface.
-    # It will fail with an empty request, but that's ok.
-    req = MoveToRelativePosition.Request()
-    res = MoveToRelativePosition.Response()
-    for idx, _ in enumerate(driver.grippers):
-        gripper = driver.grippers[idx]
-        driver._move_to_position_cb(
-            request=req,
-            response=res,
-            gripper=gripper,
-            is_absolute=False,
-        )
-        assert not res.success
+    for service_type, arg in zip(types, args):
+        for idx, _ in enumerate(driver.grippers):
+            gripper = driver.grippers[idx]
+            res = driver._move_to_position_cb(
+                request=service_type.Request(),
+                response=service_type.Response(),
+                gripper=gripper,
+                is_absolute=arg,
+            )
+            assert not res.success
 
     driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
