@@ -296,7 +296,10 @@ class Driver(object):
         if not self.set_target_speed(velocity):
             return False
 
-        trigger_bit = 13
+        if is_absolute:
+            trigger_bit = 13
+        else:
+            trigger_bit = 14
 
         def start():
             self.clear_plc_output()
@@ -332,26 +335,6 @@ class Driver(object):
             if self.error_in(duration_sec):
                 return False
             return check()
-
-    def move_to_relative_position(
-        self, position: int, velocity: int, use_gpe: bool
-    ) -> bool:
-        if not self.connected:
-            return False
-
-        self.clear_plc_output()
-        self.send_plc_output()
-
-        cmd_toggle_before = self.get_status_bit(bit=5)
-        self.set_control_bit(bit=14, value=True)
-        self.set_control_bit(bit=31, value=use_gpe)
-        self.set_target_position(position)
-        self.set_target_speed(velocity)
-
-        self.send_plc_output()
-        desired_bits = {"5": cmd_toggle_before ^ 1, "13": 1, "4": 1}
-
-        return self.wait_for_status(bits=desired_bits)
 
     def grip(
         self,
@@ -496,7 +479,10 @@ class Driver(object):
             )
 
         if isinstance(position_abs, int):
-            still_to_go = position_abs - self.get_actual_position()
+            if is_absolute:
+                still_to_go = position_abs - self.get_actual_position()
+            else:
+                still_to_go = position_abs
             if isinstance(velocity, int) and velocity > 0:
                 return abs(still_to_go) / velocity
             if isinstance(force, int) and force > 0:
@@ -877,8 +863,6 @@ class Driver(object):
     def set_target_position(self, target_pos: int) -> bool:
         with self.output_buffer_lock:
             if not isinstance(target_pos, int):
-                return False
-            if target_pos < 0:
                 return False
             data = bytes(struct.pack("i", target_pos))
             if self.fieldbus == "PN":
