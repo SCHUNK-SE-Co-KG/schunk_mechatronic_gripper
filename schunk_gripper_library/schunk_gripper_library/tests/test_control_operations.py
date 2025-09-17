@@ -64,7 +64,7 @@ def test_driver_supports_reading_and_writing_target_position():
 
 def test_driver_rejects_invalid_target_position():
     driver = Driver()
-    invalid_positions = [12.34, -0.5, -7500, "17.3"]
+    invalid_positions = [12.34, -0.5, -7500.0, "17.3"]
     for pos in invalid_positions:
         assert not driver.set_target_position(pos)
 

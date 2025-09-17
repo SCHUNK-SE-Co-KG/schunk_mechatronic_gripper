@@ -166,7 +166,7 @@ def test_move_to_absolute_position_uses_gpe_only_when_available():
 
 @skip_without_gripper
 def test_move_to_relative_position():
-    test_position = -50000
+    test_position = -5000
     test_velocity = 73000
     test_gpe = True
 

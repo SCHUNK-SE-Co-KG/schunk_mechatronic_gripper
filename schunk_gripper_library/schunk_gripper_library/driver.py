@@ -291,7 +291,7 @@ class Driver(object):
     ) -> bool:
         if not self.connected:
             return False
-        if not self.set_target_position(position, is_absolute=is_absolute):
+        if not self.set_target_position(position):
             return False
         if not self.set_target_speed(velocity):
             return False
@@ -860,11 +860,9 @@ class Driver(object):
         )
         return diagnostics
 
-    def set_target_position(self, target_pos: int, is_absolute: bool = True) -> bool:
+    def set_target_position(self, target_pos: int) -> bool:
         with self.output_buffer_lock:
             if not isinstance(target_pos, int):
-                return False
-            if is_absolute and target_pos < 0:
                 return False
             data = bytes(struct.pack("i", target_pos))
             if self.fieldbus == "PN":
