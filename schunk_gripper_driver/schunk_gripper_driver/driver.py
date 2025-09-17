@@ -24,6 +24,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     ListGrippers,
     AddGripper,
     MoveToAbsolutePosition,
+    MoveToAbsolutePositionGPE,
     Grip,
     GripGPE,
     GripAtPosition,
@@ -430,14 +431,24 @@ class Driver(Node):
                     callback_group=self.gripper_services_cb_group,
                 )
             )
-            self.gripper_services.append(
-                self.create_service(
-                    MoveToAbsolutePosition,
-                    f"~/{gripper_id}/move_to_absolute_position",
-                    partial(self._move_to_absolute_position_cb, gripper=gripper),
-                    callback_group=self.gripper_services_cb_group,
+            if gripper["driver"].gpe_available():
+                service_types = [MoveToAbsolutePositionGPE]
+            else:
+                service_types = [MoveToAbsolutePosition]
+            service_names = ["move_to_absolute_position"]
+            for srv_name, srv_type in zip(service_names, service_types):
+                self.gripper_services.append(
+                    self.create_service(
+                        srv_type,
+                        f"~/{gripper_id}/{srv_name}",
+                        partial(
+                            self._move_to_position_cb,
+                            gripper=gripper,
+                            is_absolute=True,
+                        ),
+                        callback_group=self.gripper_services_cb_group,
+                    )
                 )
-            )
             if gripper["driver"].gpe_available():
                 service_types = [GripGPE, GripAtPositionGPE]
             else:
@@ -891,26 +902,26 @@ class Driver(Node):
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
-    def _move_to_absolute_position_cb(
+    def _move_to_position_cb(
         self,
-        request: MoveToAbsolutePosition.Request,
-        response: MoveToAbsolutePosition.Response,
+        request: Any,
+        response: Any,
         gripper: Gripper,
+        is_absolute: bool,
     ):
-        self.get_logger().debug("---> Move to absolute position")
+        self.get_logger().debug("---> Move to position")
         position = int(request.position * 1e6)
         velocity = int(request.velocity * 1e6)
-        if self.needs_synchronize(gripper):
-            response.success = gripper["driver"].move_to_absolute_position(
-                position=position,
-                velocity=velocity,
-                use_gpe=request.use_gpe,
-                scheduler=self.scheduler,
-            )
-        else:
-            response.success = gripper["driver"].move_to_absolute_position(
-                position=position, velocity=velocity, use_gpe=request.use_gpe
-            )
+        use_gpe = getattr(request, "use_gpe", False)
+        scheduler = self.scheduler if self.needs_synchronize(gripper) else None
+
+        response.success = gripper["driver"].move_to_position(
+            position=position,
+            is_absolute=is_absolute,
+            velocity=velocity,
+            use_gpe=use_gpe,
+            scheduler=scheduler,
+        )
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 

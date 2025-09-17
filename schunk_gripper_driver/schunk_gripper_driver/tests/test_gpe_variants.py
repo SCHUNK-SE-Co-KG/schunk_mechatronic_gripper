@@ -27,6 +27,8 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     SoftGripAtPositionGPE,
     StrongGripGPE,
     StrongGripAtPositionGPE,
+    MoveToAbsolutePosition,
+    MoveToAbsolutePositionGPE,
 )
 
 
@@ -61,7 +63,7 @@ def test_grip_callback_handles_all_gpe_variants(ros2):
 
 
 @skip_without_gripper
-def test_driver_offers_gpe_specific_grip_services(ros2):
+def test_driver_offers_gpe_specific_services(ros2):
     driver = Driver("driver")
     driver.on_configure(state=None)
 
@@ -73,6 +75,7 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
             "/soft_grip_at_position": None,
             "/strong_grip": StrongGripGPE,
             "/strong_grip_at_position": StrongGripAtPositionGPE,
+            "/move_to_absolute_position": MoveToAbsolutePositionGPE,
         },
         "EGU_50_N_B": {
             "/grip": Grip,
@@ -81,6 +84,7 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
             "/soft_grip_at_position": None,
             "/strong_grip": None,
             "/strong_grip_at_position": None,
+            "/move_to_absolute_position": MoveToAbsolutePosition,
         },
         "EGK_25_M_B": {
             "/grip": GripGPE,
@@ -89,6 +93,7 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
             "/soft_grip_at_position": SoftGripAtPositionGPE,
             "/strong_grip": None,
             "/strong_grip_at_position": None,
+            "/move_to_absolute_position": MoveToAbsolutePositionGPE,
         },
         "EGK_25_N_B": {
             "/grip": Grip,
@@ -97,6 +102,7 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
             "/soft_grip_at_position": SoftGripAtPosition,
             "/strong_grip": None,
             "/strong_grip_at_position": None,
+            "/move_to_absolute_position": MoveToAbsolutePosition,
         },
     }
     for module, services in module_expectations.items():
@@ -113,4 +119,27 @@ def test_driver_offers_gpe_specific_grip_services(ros2):
 
         driver.on_deactivate(state=None)
 
+    driver.on_cleanup(state=None)
+
+
+@skip_without_gripper
+def test_move_to_position_callback_handles_all_variants(ros2):
+    driver = Driver("driver")
+    driver.on_configure(state=None)
+    driver.on_activate(state=None)
+
+    service_types = [
+        MoveToAbsolutePosition,
+        MoveToAbsolutePositionGPE,
+    ]
+    for gripper in driver.grippers:
+        for service_type in service_types:
+            driver._move_to_position_cb(
+                request=service_type.Request(),
+                response=service_type.Response(),
+                gripper=gripper,
+                is_absolute=True,
+            )
+
+    driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)

@@ -291,7 +291,12 @@ def test_driver_offers_callback_for_move_to_absolute_position(ros2: None):
     res = MoveToAbsolutePosition.Response()
     for idx, _ in enumerate(driver.grippers):
         gripper = driver.grippers[idx]
-        driver._move_to_absolute_position_cb(request=req, response=res, gripper=gripper)
+        driver._move_to_position_cb(
+            request=req,
+            response=res,
+            gripper=gripper,
+            is_absolute=True,
+        )
         assert not res.success
 
     driver.on_deactivate(state=None)
