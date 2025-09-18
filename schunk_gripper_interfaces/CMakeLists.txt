@@ -19,15 +19,13 @@ rosidl_generate_interfaces(
     srv/MoveToRelativePosition.srv
     srv/MoveToRelativePositionGPE.srv
     srv/Grip.srv
-    srv/GripGPE.srv
+    srv/GripWithGPE.srv
     srv/GripAtPosition.srv
-    srv/GripAtPositionGPE.srv
-    srv/SoftGrip.srv
-    srv/SoftGripGPE.srv
-    srv/SoftGripAtPosition.srv
-    srv/SoftGripAtPositionGPE.srv
-    srv/StrongGripGPE.srv
-    srv/StrongGripAtPositionGPE.srv
+    srv/GripAtPositionWithGPE.srv
+    srv/GripWithVelocity.srv
+    srv/GripWithVelocityAndGPE.srv
+    srv/GripAtPositionWithVelocity.srv
+    srv/GripAtPositionWithVelocityAndGPE.srv
     srv/Release.srv
     srv/ScanGrippers.srv
     srv/ShowConfiguration.srv

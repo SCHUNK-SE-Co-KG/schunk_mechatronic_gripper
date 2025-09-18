@@ -2,6 +2,7 @@ int16 force    # Percentage points of the gripper's max. gripping force.
                # EGU 50, 60, 80: 101 ≤ gripping force [%] ≤ 200
                # EGU 70: 101 ≤ gripping force [%] ≤ 150
 
+
 bool use_gpe  # Whether to activate grip force and position maintenance.
               # Will only be used when available in the gripper.
               # Defaults to False.
@@ -9,7 +10,7 @@ bool use_gpe  # Whether to activate grip force and position maintenance.
 bool outward  # Whether to open the gripper for grasping.
               # Defaults to False.
 
-float32 at_position  # Grip at a specific position in [m].
+float32 at_position  # Grip at a specific position in [m]
 ---
 bool success
 string message
