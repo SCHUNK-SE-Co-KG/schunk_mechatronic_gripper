@@ -28,15 +28,13 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     MoveToRelativePosition,
     MoveToRelativePositionGPE,
     Grip,
-    GripGPE,
+    GripWithGPE,
     GripAtPosition,
-    GripAtPositionGPE,
-    SoftGrip,
-    SoftGripGPE,
-    SoftGripAtPosition,
-    SoftGripAtPositionGPE,
-    StrongGripGPE,
-    StrongGripAtPositionGPE,
+    GripAtPositionWithGPE,
+    GripWithVelocity,
+    GripWithVelocityAndGPE,
+    GripAtPositionWithVelocity,
+    GripAtPositionWithVelocityAndGPE,
     Release,
     StartJogging,
     StartJoggingGPE,
@@ -454,12 +452,42 @@ class Driver(Node):
                         callback_group=self.gripper_services_cb_group,
                     )
                 )
-            if gripper["driver"].gpe_available():
-                service_types = [GripGPE, GripAtPositionGPE]
-            else:
-                service_types = [Grip, GripAtPosition]
-            service_names = ["grip", "grip_at_position"]
-            for srv_name, srv_type in zip(service_names, service_types):
+            service_type_map = {
+                "EGK": {
+                    False: {
+                        "grip": GripWithVelocity,
+                        "grip_at_position": GripAtPositionWithVelocity,
+                    },
+                    True: {
+                        "grip": GripWithVelocityAndGPE,
+                        "grip_at_position": GripAtPositionWithVelocityAndGPE,
+                    },
+                },
+                "EGU": {
+                    False: {
+                        "grip": Grip,
+                        "grip_at_position": GripAtPosition,
+                    },
+                    True: {
+                        "grip": GripWithGPE,
+                        "grip_at_position": GripAtPositionWithGPE,
+                    },
+                },
+                "EZU": {
+                    False: {
+                        "grip": Grip,
+                        "grip_at_position": GripAtPosition,
+                    },
+                    True: {
+                        "grip": GripWithGPE,
+                        "grip_at_position": GripAtPositionWithGPE,
+                    },
+                },
+            }
+            variant = gripper["driver"].get_variant()
+            use_gpe = gripper["driver"].gpe_available()
+            service_map = service_type_map.get(variant, {}).get(use_gpe, {})
+            for srv_name, srv_type in service_map.items():
                 self.gripper_services.append(
                     self.create_service(
                         srv_type,
@@ -468,37 +496,6 @@ class Driver(Node):
                         callback_group=self.gripper_services_cb_group,
                     )
                 )
-            if gripper["driver"].get_variant() == "EGK":
-                if gripper["driver"].gpe_available():
-                    service_types = [SoftGripGPE, SoftGripAtPositionGPE]
-                else:
-                    service_types = [SoftGrip, SoftGripAtPosition]
-
-                service_names = ["soft_grip", "soft_grip_at_position"]
-                for srv_name, srv_type in zip(service_names, service_types):
-                    self.gripper_services.append(
-                        self.create_service(
-                            srv_type,
-                            f"~/{gripper_id}/{srv_name}",
-                            partial(self._grip_cb, gripper=gripper),
-                            callback_group=self.gripper_services_cb_group,
-                        )
-                    )
-            if (
-                gripper["driver"].get_variant() in ["EGU", "EZU"]
-                and gripper["driver"].gpe_available()
-            ):
-                service_types = [StrongGripGPE, StrongGripAtPositionGPE]
-                service_names = ["strong_grip", "strong_grip_at_position"]
-                for srv_name, srv_type in zip(service_names, service_types):
-                    self.gripper_services.append(
-                        self.create_service(
-                            srv_type,
-                            f"~/{gripper_id}/{srv_name}",
-                            partial(self._grip_cb, gripper=gripper),
-                            callback_group=self.gripper_services_cb_group,
-                        )
-                    )
             self.gripper_services.append(
                 self.create_service(
                     Release,
