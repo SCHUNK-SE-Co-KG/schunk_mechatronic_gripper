@@ -198,6 +198,23 @@ class Driver(Node):
                 devices.append(id)
         return devices
 
+    def get_unique_id(self, gripper: str) -> str:
+        known_ids = [entry["gripper_id"] for entry in self.grippers]
+
+        def increment(name: str) -> str:
+            if name.split("_")[-1].isdigit():
+                count = int(name.split("_")[-1]) + 1
+                name = "_".join(name.split("_")[:-1])
+                name += f"_{count}"
+            else:
+                name = f"{name}_1"
+            return name
+
+        unique_id = increment(gripper)
+        while unique_id in known_ids:
+            unique_id = increment(unique_id)
+        return unique_id
+
     def show_configuration(self) -> list[GripperConfig]:
         configuration = []
         for gripper in self.grippers:

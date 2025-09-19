@@ -439,6 +439,36 @@ def test_driver_offers_adding_grippers(ros2: None):
     assert len(driver.grippers) == 2
 
 
+def test_driver_offers_getting_unique_gripper_ids(ros2: None):
+    driver = Driver("driver")
+
+    setups = [
+        {"known": ["a_1", "b_1", "c_1"], "new": "a", "expected": "a_2"},
+        {"known": ["a_1"], "new": "b", "expected": "b_1"},
+        {"known": ["a_2"], "new": "a", "expected": "a_1"},
+    ]
+    for setup in setups:
+
+        # Fill the driver's list of known grippers
+        driver.reset_grippers()
+        for gripper_id in setup["known"]:
+            gripper = Gripper(
+                {
+                    "host": "",
+                    "port": 0,
+                    "serial_port": "",
+                    "device_id": 0,
+                    "driver": GripperDriver(),
+                    "gripper_id": gripper_id,
+                }
+            )
+            driver.grippers.append(gripper)
+
+        # Check
+        unique_id = driver.get_unique_id(gripper=setup["new"])  # type: ignore
+        assert unique_id == setup["expected"]
+
+
 def test_driver_rejects_adding_duplicate_grippers(ros2: None):
     driver = Driver("driver")
     driver.grippers.clear()
