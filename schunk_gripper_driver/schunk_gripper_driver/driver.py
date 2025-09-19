@@ -375,7 +375,7 @@ class Driver(Node):
             return TransitionCallbackReturn.FAILURE
         self.scheduler.start()
 
-        # Connect each gripper
+        # Try to connect each gripper
         for idx, gripper in enumerate(self.grippers):
             driver = GripperDriver()
             if self.needs_synchronize(gripper):
@@ -394,7 +394,14 @@ class Driver(Node):
             else:
                 self.grippers[idx]["driver"] = driver
 
-        # Start cyclic updates for each gripper
+        # Update empty gripper IDs
+        for idx, gripper in enumerate(self.grippers):
+            if not gripper["gripper_id"]:
+                self.grippers[idx]["gripper_id"] = self.get_unique_id(
+                    gripper=gripper["driver"].gripper
+                )
+
+        # Start cyclic updates for each gripper that need special synchronization
         for idx, _ in enumerate(self.grippers):
             gripper = self.grippers[idx]
             if self.needs_synchronize(gripper):
