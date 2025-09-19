@@ -382,17 +382,14 @@ class Driver(Node):
                 update_cycle = None
             else:
                 update_cycle = 0.05
-            if not driver.connect(
+            driver.connect(
                 host=gripper["host"],
                 port=gripper["port"],
                 serial_port=gripper["serial_port"],
                 device_id=gripper["device_id"],
                 update_cycle=update_cycle,
-            ):
-                self.get_logger().warn(f"Gripper connect failed: {gripper}")
-                return TransitionCallbackReturn.FAILURE
-            else:
-                self.grippers[idx]["driver"] = driver
+            )
+            self.grippers[idx]["driver"] = driver
 
         # Update empty gripper IDs
         for idx, gripper in enumerate(self.grippers):
@@ -433,16 +430,12 @@ class Driver(Node):
     def on_activate(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().debug("on_activate() is called.")
 
-        # Get every gripper ready to go
+        # Get available grippers ready to go
         for idx, gripper in enumerate(self.grippers):
             if self.needs_synchronize(gripper):
-                success = self.grippers[idx]["driver"].acknowledge(
-                    scheduler=self.scheduler
-                )
+                self.grippers[idx]["driver"].acknowledge(scheduler=self.scheduler)
             else:
-                success = self.grippers[idx]["driver"].acknowledge()
-            if not success:
-                return TransitionCallbackReturn.FAILURE
+                self.grippers[idx]["driver"].acknowledge()
 
         # Gripper-specific services
         for idx, _ in enumerate(self.grippers):
