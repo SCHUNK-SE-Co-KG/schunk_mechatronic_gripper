@@ -30,8 +30,8 @@ def test_driver_uses_previous_configuration_in_headless_mode(ros2):
     # Store a configuration that the driver should load
     location = Path("/var/tmp/schunk_gripper")
     config = [
-        {"host": "1.2.3.4", "port": 1234},
-        {"serial_port": "hello", "device_id": 42},
+        {"gripper_id": "abc", "host": "1.2.3.4", "port": 1234},
+        {"gripper_id": "xyz", "serial_port": "hello", "device_id": 42},
     ]
     with open(location.joinpath("configuration.json"), "w") as f:
         json.dump(config, f)

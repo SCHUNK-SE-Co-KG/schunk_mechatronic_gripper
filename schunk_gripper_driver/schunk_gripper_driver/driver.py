@@ -246,6 +246,7 @@ class Driver(Node):
             configuration = []
             for gripper in self.grippers:
                 entry: OrderedDict[str, str | int] = OrderedDict()
+                entry["gripper_id"] = gripper["gripper_id"]
                 entry["host"] = gripper["host"]
                 entry["port"] = gripper["port"]
                 entry["serial_port"] = gripper["serial_port"]
