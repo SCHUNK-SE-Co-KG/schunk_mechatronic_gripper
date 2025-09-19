@@ -291,7 +291,12 @@ class Driver(Node):
         return True
 
     def add_gripper(
-        self, host: str = "", port: int = 0, serial_port: str = "", device_id: int = 0
+        self,
+        gripper_id: str = "",
+        host: str = "",
+        port: int = 0,
+        serial_port: str = "",
+        device_id: int = 0,
     ) -> bool:
         LOG_NS = "Add gripper:"
         if not any([host, port, serial_port, device_id]):
@@ -323,14 +328,28 @@ class Driver(Node):
                         f"{LOG_NS} serial_port and device_id already used"
                     )
                     return False
+
+        driver = GripperDriver()
+        if not gripper_id:
+            if not driver.connect(
+                host=host,
+                port=port,
+                serial_port=serial_port,
+                device_id=device_id,
+                update_cycle=None,
+            ):
+                return False
+            gripper_id = self.get_unique_id(driver.gripper)
+            driver.disconnect()
+
         self.grippers.append(
             {
                 "host": host,
                 "port": port,
                 "serial_port": serial_port,
                 "device_id": device_id,
-                "driver": GripperDriver(),
-                "gripper_id": "",
+                "driver": driver,
+                "gripper_id": gripper_id,
             }
         )
         return True
@@ -373,16 +392,6 @@ class Driver(Node):
                 return TransitionCallbackReturn.FAILURE
             else:
                 self.grippers[idx]["driver"] = driver
-
-        # Set unique gripper IDs
-        devices = []
-        for idx, gripper in enumerate(self.grippers):
-            id = f"{gripper['driver'].gripper}_1"
-            while id in devices:
-                count = int(id.split("_")[-1]) + 1
-                id = id[:-2] + f"_{count}"
-            devices.append(id)
-            self.grippers[idx]["gripper_id"] = id
 
         # Start cyclic updates for each gripper
         for idx, _ in enumerate(self.grippers):
