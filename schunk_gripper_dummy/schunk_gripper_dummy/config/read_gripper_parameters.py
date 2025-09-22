@@ -14,7 +14,7 @@ parameter_codes = "./gripper_parameter_codes.json"
 
 driver = Driver()
 driver.connect(host=args.ip)
-outfile = f"./grippers/{driver.gripper}.json"
+outfile = f"./grippers/{driver.gripper_type}.json"
 driver.disconnect()
 
 

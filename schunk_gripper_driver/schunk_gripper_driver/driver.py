@@ -340,7 +340,7 @@ class Driver(Node):
                 update_cycle=None,
             ):
                 return False
-            gripper_id = self.get_unique_id(driver.gripper)
+            gripper_id = self.get_unique_id(driver.gripper_type)
             driver.disconnect()
 
         self.grippers.append(
@@ -391,7 +391,7 @@ class Driver(Node):
         for idx, gripper in enumerate(self.grippers):
             if not gripper["gripper_id"]:
                 self.grippers[idx]["gripper_id"] = self.get_unique_id(
-                    gripper=gripper["driver"].gripper
+                    gripper=gripper["driver"].gripper_type
                 )
 
         # Start cyclic updates with reconnect mechanism for each gripper
@@ -862,7 +862,7 @@ class Driver(Node):
                 cfg.host = host
                 cfg.port = port
                 response.connections.append(cfg)
-                response.grippers.append(driver.gripper)
+                response.grippers.append(driver.gripper_type)
                 driver.disconnect()
 
         return response
