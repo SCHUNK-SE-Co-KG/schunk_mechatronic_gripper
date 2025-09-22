@@ -121,7 +121,7 @@ class Driver(object):
         self.polling_thread: Thread = Thread()
         self.update_cycle: float = 0.05  # sec
         self.update_count: int = 0  # since last connect() call
-        self.disconnect_request: Event = Event()
+        self.stop_request: Event = Event()
         self.reconnect_interval: float = 1.0
 
     def connect(
@@ -188,12 +188,7 @@ class Driver(object):
 
             if update_cycle:
                 self.update_cycle = update_cycle
-                self.polling_thread = Thread(
-                    target=self._module_update,
-                    args=(self.update_cycle,),
-                    daemon=True,
-                )
-                self.polling_thread.start()
+                self.start_module_updates()
 
             if not self.update_module_parameters():
                 return False
@@ -213,9 +208,7 @@ class Driver(object):
         self.module = ""
         self.fieldbus = ""
         self.gripper = ""
-        self.disconnect_request.set()
-        if self.polling_thread.is_alive():
-            self.polling_thread.join()
+        self.stop_module_updates()
 
         if self.mb_client and self.mb_client.connected:
             with self.mb_client_lock:
@@ -227,6 +220,23 @@ class Driver(object):
 
         self.connected = False
         self.update_module_parameters()
+        return True
+
+    def start_module_updates(self) -> bool:
+        if self.polling_thread.is_alive():
+            return True
+        self.polling_thread = Thread(
+            target=self._module_update,
+            args=(),
+            daemon=True,
+        )
+        self.polling_thread.start()
+        return True
+
+    def stop_module_updates(self) -> bool:
+        self.stop_request.set()
+        if self.polling_thread.is_alive():
+            self.polling_thread.join()
         return True
 
     def acknowledge(self, scheduler: Scheduler | None = None) -> bool:
@@ -933,22 +943,22 @@ class Driver(object):
                 self.plc_input_buffer[byte_index] &= ~(1 << bit_index)
             return True
 
-    def _module_update(self, update_cycle: float) -> None:
-        self.disconnect_request.clear()
+    def _module_update(self) -> None:
+        self.stop_request.clear()
         fails = 0
         next_time = time.perf_counter()
-        while not self.disconnect_request.is_set():
+        while not self.stop_request.is_set():
             if self.receive_plc_input():
                 self.connected = True
                 self.update_count += 1
                 fails = 0
                 time.sleep(max(0, next_time - time.perf_counter()))
-                next_time += update_cycle
+                next_time += self.update_cycle
             else:
                 self.connected = False
                 fails += 1
                 if fails < 3:
-                    time.sleep(update_cycle)
+                    time.sleep(self.update_cycle)
                 else:
                     time.sleep(self.reconnect_interval)
 
