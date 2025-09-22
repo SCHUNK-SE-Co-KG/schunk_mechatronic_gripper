@@ -378,16 +378,12 @@ class Driver(Node):
         # Try to connect each gripper
         for idx, gripper in enumerate(self.grippers):
             driver = GripperDriver()
-            if self.needs_synchronize(gripper):
-                update_cycle = None
-            else:
-                update_cycle = 0.05
             driver.connect(
                 host=gripper["host"],
                 port=gripper["port"],
                 serial_port=gripper["serial_port"],
                 device_id=gripper["device_id"],
-                update_cycle=update_cycle,
+                update_cycle=None,
             )
             self.grippers[idx]["driver"] = driver
 
@@ -398,13 +394,11 @@ class Driver(Node):
                     gripper=gripper["driver"].gripper
                 )
 
-        # Start cyclic updates for each gripper that need special synchronization
+        # Start cyclic updates with reconnect mechanism for each gripper
         for idx, _ in enumerate(self.grippers):
             gripper = self.grippers[idx]
-            if self.needs_synchronize(gripper):
-                self.scheduler.cyclic_execute(
-                    func=partial(gripper["driver"].receive_plc_input), cycle_time=0.05
-                )
+            scheduler = self.scheduler if self.needs_synchronize(gripper) else None
+            gripper["driver"].start_module_updates(scheduler=scheduler)
 
         # Start info services
         self.list_grippers_srv = self.create_service(
@@ -616,10 +610,11 @@ class Driver(Node):
 
     def on_cleanup(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().debug("on_cleanup() is called.")
-        self.scheduler.stop()
         for gripper in self.grippers:
             gripper["driver"].disconnect()
             gripper["driver"] = GripperDriver()
+
+        self.scheduler.stop()
 
         # Release info services
         if not self.destroy_service(self.list_grippers_srv):

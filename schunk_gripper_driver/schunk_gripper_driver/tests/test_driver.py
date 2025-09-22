@@ -560,7 +560,7 @@ def test_driver_offers_resetting_grippers(ros2: None):
 
 
 @skip_without_gripper
-def test_driver_schedules_concurrent_tasks(ros2: None):
+def test_driver_schedules_concurrent_module_updates(ros2: None):
     driver = Driver("driver")
     driver.reset_grippers()
 
@@ -583,15 +583,12 @@ def test_driver_schedules_concurrent_tasks(ros2: None):
     driver._add_gripper_cb(request=request_2, response=response)
     assert response.success
 
-    # Grippers with a concurrent serial port can't have an update cycle.
+    # Grippers with a concurrent serial port still have an update cycle.
     driver.on_configure(state=None)
     assert len(driver.grippers) == 2
-    assert not driver.grippers[0]["driver"].polling_thread.is_alive()
-    assert not driver.grippers[1]["driver"].polling_thread.is_alive()
+    assert driver.grippers[0]["driver"].polling_thread.is_alive()
+    assert driver.grippers[1]["driver"].polling_thread.is_alive()
 
-    driver.on_activate(state=None)
-
-    driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
 
 

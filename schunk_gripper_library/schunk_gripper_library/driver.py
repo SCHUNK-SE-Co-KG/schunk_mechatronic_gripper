@@ -172,7 +172,7 @@ class Driver(object):
                     baudrate=115200,
                     parity="E" if supports_parity(serial_port) else "N",
                     stopbits=1,
-                    timeout=0.05,
+                    timeout=0.1,
                     trace_connect=None,
                     trace_packet=None,
                     trace_pdu=None,
@@ -222,12 +222,12 @@ class Driver(object):
         self.update_module_parameters()
         return True
 
-    def start_module_updates(self) -> bool:
+    def start_module_updates(self, scheduler: Scheduler | None = None) -> bool:
         if self.polling_thread.is_alive():
             return True
         self.polling_thread = Thread(
             target=self._module_update,
-            args=(),
+            args=(scheduler,),
             daemon=True,
         )
         self.polling_thread.start()
@@ -943,12 +943,17 @@ class Driver(object):
                 self.plc_input_buffer[byte_index] &= ~(1 << bit_index)
             return True
 
-    def _module_update(self) -> None:
+    def _module_update(self, scheduler: Scheduler | None = None) -> None:
         self.stop_request.clear()
         fails = 0
         next_time = time.perf_counter()
         while not self.stop_request.is_set():
-            if self.receive_plc_input():
+            runs_fine = (
+                scheduler.execute(func=partial(self.receive_plc_input)).result()
+                if scheduler
+                else self.receive_plc_input()
+            )
+            if runs_fine:
                 self.connected = True
                 self.update_count += 1
                 fails = 0
