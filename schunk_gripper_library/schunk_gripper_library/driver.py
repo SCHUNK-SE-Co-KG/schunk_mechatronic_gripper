@@ -180,34 +180,15 @@ class Driver(object):
                 self.connected = self.mb_client.connect()
 
         if self.connected:
-            if not (data := self.read_module_parameter("0x1130")):
+            if not self.update_module_parameters():
                 return False
-            self.fieldbus = self.valid_fieldbus_types.get(
-                str(struct.unpack("h", data)[0]), ""
-            )
-
             if update_cycle:
                 self.update_cycle = update_cycle
                 self.start_module_updates()
 
-            if not self.update_module_parameters():
-                return False
-
-            self.module_type = self.valid_module_types.get(
-                str(self.module_parameters["module_type"]), ""
-            )
-            self.gripper_type = self.compose_gripper_type(
-                module_type=self.module_type, fieldbus=self.fieldbus
-            )
-            if not self.gripper_type:
-                return False
-
         return self.connected
 
     def disconnect(self) -> bool:
-        self.module_type = ""
-        self.gripper_type = ""
-        self.fieldbus = ""
         self.stop_module_updates()
 
         if self.mb_client and self.mb_client.connected:
@@ -609,7 +590,17 @@ class Driver(object):
         if not self.connected:
             for key in self.module_parameters.keys():
                 self.module_parameters[key] = None
+            self.fieldbus = ""
+            self.module_type = ""
+            self.gripper_type = ""
             return True
+
+        if not (fieldbus_param := self.read_module_parameter("0x1130")):
+            return False
+
+        self.fieldbus = self.valid_fieldbus_types.get(
+            str(struct.unpack("h", fieldbus_param)[0]), ""
+        )
 
         value: int | str
         for param, fields in self.readable_parameters.items():
@@ -640,6 +631,15 @@ class Driver(object):
                 self.module_parameters[fields["name"]] = value
 
         if any([entry is None for entry in self.module_parameters.values()]):
+            return False
+
+        self.module_type = self.valid_module_types.get(
+            str(self.module_parameters["module_type"]), ""
+        )
+        self.gripper_type = self.compose_gripper_type(
+            module_type=self.module_type, fieldbus=self.fieldbus
+        )
+        if not self.gripper_type:
             return False
 
         return True
