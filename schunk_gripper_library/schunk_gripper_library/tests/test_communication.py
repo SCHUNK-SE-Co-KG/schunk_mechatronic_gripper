@@ -710,7 +710,6 @@ def test_driver_offers_updating_internal_module_parameters():
 
         # Values are reset when disconnected
         driver.disconnect()
-        assert driver.update_module_parameters()
         for key, value in driver.module_parameters.items():
             assert value is None, f"key: {key}"
 

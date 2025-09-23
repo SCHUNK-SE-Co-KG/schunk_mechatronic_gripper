@@ -139,3 +139,38 @@ def test_driver_handles_pymodbus_exceptions_during_polling(simulate_pymodbus_fai
     assert driver.connected
 
     driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_updates_module_parameters_after_reconnection():
+    driver = Driver()
+
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        assert driver.connect(
+            host=host,
+            port=port,
+            serial_port=serial_port,
+            device_id=12,
+            update_cycle=None,
+        )
+        fieldbus_before = driver.fieldbus
+        module_type_before = driver.module_type
+        gripper_type_before = driver.gripper_type
+        parameters_before = driver.module_parameters
+
+        # Mimic an interruption by clearing all relevant parameters.
+        # The driver should read them anew on reconnects.
+        driver.clear_module_parameters()
+        driver.connected = False
+
+        driver.start_module_updates()
+        time.sleep(0.2)
+        driver.stop_module_updates()
+        assert driver.fieldbus == fieldbus_before
+        assert driver.module_type == module_type_before
+        assert driver.gripper_type == gripper_type_before
+        assert driver.module_parameters == parameters_before
+
+        driver.disconnect()

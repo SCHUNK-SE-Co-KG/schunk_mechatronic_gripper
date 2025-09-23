@@ -553,10 +553,8 @@ class Driver(object):
             data = self.read_module_parameter(self.plc_input)
             if data:
                 self.plc_input_buffer = data
-                self.connected = True
-            else:
-                self.connected = False
-            return self.connected
+                return True
+            return False
 
     def send_plc_output(self) -> bool:
         with self.output_buffer_lock:
@@ -953,9 +951,18 @@ class Driver(object):
                 else self.receive_plc_input()
             )
             if runs_fine:
-                self.connected = True
-                self.update_count += 1
-                fails = 0
+                if self.connected:
+                    self.update_count += 1
+                    fails = 0
+                else:
+                    self.connected = (
+                        scheduler.execute(
+                            func=partial(self.update_module_parameters)
+                        ).result()
+                        if scheduler
+                        else self.update_module_parameters()
+                    )
+
                 time.sleep(max(0, next_time - time.perf_counter()))
                 next_time += self.update_cycle
             else:
