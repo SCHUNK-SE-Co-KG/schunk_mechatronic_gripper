@@ -715,6 +715,32 @@ def test_driver_offers_updating_internal_module_parameters():
             assert value is None, f"key: {key}"
 
 
+@skip_without_gripper
+def test_driver_offers_clearing_internal_module_parameters():
+    driver = Driver()
+
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        driver.connect(
+            host=host,
+            port=port,
+            serial_port=serial_port,
+            device_id=12,
+            update_cycle=None,
+        )
+
+        assert driver.clear_module_parameters()
+        for key, value in driver.module_parameters.items():
+            assert value is None, f"key: {key}"
+
+        # Repetitive
+        for _ in range(3):
+            assert driver.clear_module_parameters()
+            for key, value in driver.module_parameters.items():
+                assert value is None, f"key: {key}"
+
+
 def test_driver_offers_waiting_until_error():
     driver = Driver()
     error_bit = 7

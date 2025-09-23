@@ -200,7 +200,7 @@ class Driver(object):
                 self.web_client = None
 
         self.connected = False
-        self.update_module_parameters()
+        self.clear_module_parameters()
         return True
 
     def start_module_updates(self, scheduler: Scheduler | None = None) -> bool:
@@ -586,15 +586,6 @@ class Driver(object):
         return ""
 
     def update_module_parameters(self) -> bool:
-
-        if not self.connected:
-            for key in self.module_parameters.keys():
-                self.module_parameters[key] = None
-            self.fieldbus = ""
-            self.module_type = ""
-            self.gripper_type = ""
-            return True
-
         if not (fieldbus_param := self.read_module_parameter("0x1130")):
             return False
 
@@ -642,6 +633,14 @@ class Driver(object):
         if not self.gripper_type:
             return False
 
+        return True
+
+    def clear_module_parameters(self) -> bool:
+        for key in self.module_parameters.keys():
+            self.module_parameters[key] = None
+        self.fieldbus = ""
+        self.module_type = ""
+        self.gripper_type = ""
         return True
 
     def read_module_parameter(self, param: str) -> bytearray:
