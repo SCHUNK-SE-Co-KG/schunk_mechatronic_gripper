@@ -262,3 +262,23 @@ def test_release():
             assert driver.release(use_gpe=True)
 
         assert driver.disconnect()
+
+
+@skip_without_gripper
+def test_brake_test():
+    driver = Driver()
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        assert driver.connect(
+            host=host, port=port, serial_port=serial_port, device_id=12
+        )
+        assert driver.acknowledge()
+
+        if serial_port:
+            # Expected to fail
+            assert not driver.brake_test()
+        else:
+            assert driver.brake_test()
+
+        assert driver.disconnect()
