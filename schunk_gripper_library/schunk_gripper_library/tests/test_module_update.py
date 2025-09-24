@@ -1,7 +1,8 @@
 from schunk_gripper_library.driver import Driver
-from schunk_gripper_library.utility import skip_without_gripper
+from schunk_gripper_library.utility import skip_without_gripper, Scheduler
 import time
 import pytest
+import threading
 
 
 @skip_without_gripper
@@ -115,3 +116,48 @@ def test_driver_updates_with_specified_cycle():
             assert (
                 driver.update_count >= expected_count
             ), f"with update cycle: {cycle} on host: {host}"
+
+
+def test_driver_offers_starting_module_updates():
+    driver = Driver()
+    threads_before = threading.active_count()
+
+    # Normal usage
+    assert driver.start_module_updates()
+    assert threading.active_count() == threads_before + 1
+    driver.stop_module_updates()
+    assert threading.active_count() == threads_before
+
+    # Normal lifecycle
+    for _ in range(3):
+        driver.start_module_updates()
+        driver.stop_module_updates()
+    assert threading.active_count() == threads_before
+
+    # Repeated starts and stops
+    for _ in range(3):
+        driver.start_module_updates()
+    assert threading.active_count() == threads_before + 1
+
+    for _ in range(3):
+        driver.stop_module_updates()
+    assert threading.active_count() == threads_before
+
+
+@skip_without_gripper
+def test_module_updates_also_run_with_a_scheduler():
+    driver = Driver()
+    scheduler = Scheduler()
+    scheduler.start()
+
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
+
+        # With scheduler
+        before = driver.update_count
+        driver.start_module_updates(scheduler=scheduler)
+        time.sleep(0.5)
+        driver.stop_module_updates()
+        assert driver.update_count > before

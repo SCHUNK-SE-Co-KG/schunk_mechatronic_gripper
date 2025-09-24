@@ -30,8 +30,8 @@ def test_driver_uses_previous_configuration_in_headless_mode(ros2):
     # Store a configuration that the driver should load
     location = Path("/var/tmp/schunk_gripper")
     config = [
-        {"host": "1.2.3.4", "port": 1234},
-        {"serial_port": "hello", "device_id": 42},
+        {"gripper_id": "abc", "host": "1.2.3.4", "port": 1234},
+        {"gripper_id": "xyz", "serial_port": "hello", "device_id": 42},
     ]
     with open(location.joinpath("configuration.json"), "w") as f:
         json.dump(config, f)
@@ -64,10 +64,17 @@ def test_driver_uses_previous_configuration_in_headless_mode(ros2):
         driver = Driver("driver")
         assert len(driver.grippers) == 0
 
-    # Store a valid configuration for the next test
+    # Store a configuration for the next test.
+    # Let one gripper be unavailable during start up.
+    # This mimics the use case when grippers are only powered after
+    # the driver starts in headless mode.
     config = [
-        {"host": "0.0.0.0", "port": 8000},
-        {"serial_port": "/dev/ttyUSB0", "device_id": 12},
+        {"gripper_id": "gripper_1", "host": "0.0.0.0", "port": 8000},
+        {
+            "gripper_id": "unconnected_gripper",
+            "serial_port": "not available yet",
+            "device_id": 12,
+        },
     ]
     with open(location.joinpath("configuration.json"), "w") as f:
         json.dump(config, f)
@@ -81,6 +88,14 @@ def test_driver_auto_configures_in_headless_mode(lifecycle_interface):
     time.sleep(1.0)
 
     assert driver.check_state(State.PRIMARY_STATE_ACTIVE)
+
+    # Check that the expected gripper services are up,
+    # even for the unconnected gripper
+    gripper_services = [
+        "/schunk/driver/gripper_1/acknowledge",
+        "/schunk/driver/unconnected_gripper/acknowledge",
+    ]
+    assert driver.check(gripper_services, dtype="service", should_exist=True)
 
     # Clean-up for next test
     driver.change_state(Transition.TRANSITION_DEACTIVATE)

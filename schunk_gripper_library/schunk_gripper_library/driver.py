@@ -53,8 +53,8 @@ class Driver(object):
         self.error_byte: int = 12
         self.warning_byte: int = 14
         self.additional_byte: int = 15
-        self.gripper: str = ""
-        self.module: str = ""
+        self.gripper_type: str = ""
+        self.module_type: str = ""
         self.fieldbus: str = ""
         self.module_parameters: dict = {
             "module_type": None,
@@ -121,7 +121,7 @@ class Driver(object):
         self.polling_thread: Thread = Thread()
         self.update_cycle: float = 0.05  # sec
         self.update_count: int = 0  # since last connect() call
-        self.disconnect_request: Event = Event()
+        self.stop_request: Event = Event()
         self.reconnect_interval: float = 1.0
 
     def connect(
@@ -172,7 +172,7 @@ class Driver(object):
                     baudrate=115200,
                     parity="E" if supports_parity(serial_port) else "N",
                     stopbits=1,
-                    timeout=0.05,
+                    timeout=0.1,
                     trace_connect=None,
                     trace_packet=None,
                     trace_pdu=None,
@@ -180,42 +180,16 @@ class Driver(object):
                 self.connected = self.mb_client.connect()
 
         if self.connected:
-            if not (data := self.read_module_parameter("0x1130")):
-                return False
-            self.fieldbus = self.valid_fieldbus_types.get(
-                str(struct.unpack("h", data)[0]), ""
-            )
-
-            if update_cycle:
-                self.update_cycle = update_cycle
-                self.polling_thread = Thread(
-                    target=self._module_update,
-                    args=(self.update_cycle,),
-                    daemon=True,
-                )
-                self.polling_thread.start()
-
             if not self.update_module_parameters():
                 return False
-
-            self.module = self.valid_module_types.get(
-                str(self.module_parameters["module_type"]), ""
-            )
-            self.gripper = self.compose_gripper_type(
-                module=self.module, fieldbus=self.fieldbus
-            )
-            if not self.gripper:
-                return False
+            if update_cycle:
+                self.update_cycle = update_cycle
+                self.start_module_updates()
 
         return self.connected
 
     def disconnect(self) -> bool:
-        self.module = ""
-        self.fieldbus = ""
-        self.gripper = ""
-        self.disconnect_request.set()
-        if self.polling_thread.is_alive():
-            self.polling_thread.join()
+        self.stop_module_updates()
 
         if self.mb_client and self.mb_client.connected:
             with self.mb_client_lock:
@@ -226,7 +200,24 @@ class Driver(object):
                 self.web_client = None
 
         self.connected = False
-        self.update_module_parameters()
+        self.clear_module_parameters()
+        return True
+
+    def start_module_updates(self, scheduler: Scheduler | None = None) -> bool:
+        if self.polling_thread.is_alive():
+            return True
+        self.polling_thread = Thread(
+            target=self._module_update,
+            args=(scheduler,),
+            daemon=True,
+        )
+        self.polling_thread.start()
+        return True
+
+    def stop_module_updates(self) -> bool:
+        self.stop_request.set()
+        if self.polling_thread.is_alive():
+            self.polling_thread.join()
         return True
 
     def acknowledge(self, scheduler: Scheduler | None = None) -> bool:
@@ -562,19 +553,17 @@ class Driver(object):
             data = self.read_module_parameter(self.plc_input)
             if data:
                 self.plc_input_buffer = data
-                self.connected = True
-            else:
-                self.connected = False
-            return self.connected
+                return True
+            return False
 
     def send_plc_output(self) -> bool:
         with self.output_buffer_lock:
             return self.write_module_parameter(self.plc_output, self.plc_output_buffer)
 
     def gpe_available(self) -> bool:
-        if not self.module:
+        if not self.module_type:
             return False
-        keys = self.module.split("_")
+        keys = self.module_type.split("_")
         if len(keys) < 3:
             return False
         if keys[2] == "M":
@@ -582,24 +571,25 @@ class Driver(object):
         return False
 
     def get_variant(self) -> str:
-        if not self.module:
+        if not self.module_type:
             return ""
-        if self.module not in self.valid_module_types.values():
+        if self.module_type not in self.valid_module_types.values():
             return ""
-        if self.module.startswith("EGU"):
+        if self.module_type.startswith("EGU"):
             return "EGU"
-        elif self.module.startswith("EGK"):
+        elif self.module_type.startswith("EGK"):
             return "EGK"
-        elif self.module.startswith("EZU"):
+        elif self.module_type.startswith("EZU"):
             return "EZU"
         return ""
 
     def update_module_parameters(self) -> bool:
+        if not (fieldbus_param := self.read_module_parameter("0x1130")):
+            return False
 
-        if not self.connected:
-            for key in self.module_parameters.keys():
-                self.module_parameters[key] = None
-            return True
+        self.fieldbus = self.valid_fieldbus_types.get(
+            str(struct.unpack("h", fieldbus_param)[0]), ""
+        )
 
         value: int | str
         for param, fields in self.readable_parameters.items():
@@ -632,6 +622,23 @@ class Driver(object):
         if any([entry is None for entry in self.module_parameters.values()]):
             return False
 
+        self.module_type = self.valid_module_types.get(
+            str(self.module_parameters["module_type"]), ""
+        )
+        self.gripper_type = self.compose_gripper_type(
+            module_type=self.module_type, fieldbus=self.fieldbus
+        )
+        if not self.gripper_type:
+            return False
+
+        return True
+
+    def clear_module_parameters(self) -> bool:
+        for key in self.module_parameters.keys():
+            self.module_parameters[key] = None
+        self.fieldbus = ""
+        self.module_type = ""
+        self.gripper_type = ""
         return True
 
     def read_module_parameter(self, param: str) -> bytearray:
@@ -743,13 +750,13 @@ class Driver(object):
     def contains_non_hex_chars(self, buffer: str) -> bool:
         return bool(re.search(r"[^0-9a-fA-F]", buffer))
 
-    def compose_gripper_type(self, module: str, fieldbus: str) -> str:
+    def compose_gripper_type(self, module_type: str, fieldbus: str) -> str:
         if (
-            module not in self.valid_module_types.values()
+            module_type not in self.valid_module_types.values()
             or fieldbus not in self.valid_fieldbus_types.values()
         ):
             return ""
-        entries = module.split("_")
+        entries = module_type.split("_")
         gripper_type = "_".join(
             [entries[0], entries[1], fieldbus, entries[2], entries[3]]
         )
@@ -933,22 +940,36 @@ class Driver(object):
                 self.plc_input_buffer[byte_index] &= ~(1 << bit_index)
             return True
 
-    def _module_update(self, update_cycle: float) -> None:
-        self.disconnect_request.clear()
+    def _module_update(self, scheduler: Scheduler | None = None) -> None:
+        self.stop_request.clear()
         fails = 0
         next_time = time.perf_counter()
-        while not self.disconnect_request.is_set():
-            if self.receive_plc_input():
-                self.connected = True
-                self.update_count += 1
-                fails = 0
+        while not self.stop_request.is_set():
+            runs_fine = (
+                scheduler.execute(func=partial(self.receive_plc_input)).result()
+                if scheduler
+                else self.receive_plc_input()
+            )
+            if runs_fine:
+                if self.connected:
+                    self.update_count += 1
+                    fails = 0
+                else:
+                    self.connected = (
+                        scheduler.execute(
+                            func=partial(self.update_module_parameters)
+                        ).result()
+                        if scheduler
+                        else self.update_module_parameters()
+                    )
+
                 time.sleep(max(0, next_time - time.perf_counter()))
-                next_time += update_cycle
+                next_time += self.update_cycle
             else:
                 self.connected = False
                 fails += 1
                 if fails < 3:
-                    time.sleep(update_cycle)
+                    time.sleep(self.update_cycle)
                 else:
                     time.sleep(self.reconnect_interval)
 

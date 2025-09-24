@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from schunk_gripper_driver.driver import Driver
+from schunk_gripper_driver.driver import Driver, Gripper
+from schunk_gripper_library.driver import Driver as GripperDriver
+from schunk_gripper_library.utility import skip_without_gripper
 import json
 from pathlib import Path
 from unittest import mock
@@ -31,11 +33,18 @@ def test_driver_offers_saving_gripper_configuration(ros2):
         assert not driver.save_configuration(location=location), f"location: {location}"
 
     # When filled
-    config = {"host": "1.2.3.4", "port": 77, "serial_port": "abc", "device_id": 42}
+    config = {
+        "gripper_id": "not-empty",
+        "host": "1.2.3.4",
+        "port": 77,
+        "serial_port": "abc",
+        "device_id": 42,
+    }
     driver.add_gripper(**config)
     assert driver.save_configuration()
 
 
+@skip_without_gripper
 def test_driver_offers_loading_previous_gripper_configuration(ros2):
     driver = Driver("driver")
     driver.reset_grippers()
@@ -44,8 +53,15 @@ def test_driver_offers_loading_previous_gripper_configuration(ros2):
     assert not driver.load_previous_configuration(location="non-existent")
     assert len(driver.grippers) == 0
 
-    # With saved configuration
-    config = {"host": "1.2.3.4", "port": 77, "serial_port": "abc", "device_id": 42}
+    # Configurations that have a non-empty `gripper_id` get
+    # loaded without checking the connection
+    config = {
+        "gripper_id": "abc",
+        "host": "1.2.3.4",
+        "port": 77,
+        "serial_port": "abc",
+        "device_id": 42,
+    }
     driver.add_gripper(**config)
     assert driver.save_configuration()
     driver.reset_grippers()
@@ -54,6 +70,20 @@ def test_driver_offers_loading_previous_gripper_configuration(ros2):
     assert len(driver.grippers) == 1
     for key, value in config.items():
         assert driver.grippers[0][key] == value
+
+    # Configurations with empty `gripper_id` are being checked
+    driver.reset_grippers()
+    valid_config = {
+        "gripper_id": "",
+        "host": "0.0.0.0",
+        "port": 8000,
+        "serial_port": "",
+        "device_id": 0,
+    }
+    driver.add_gripper(**valid_config)
+    assert driver.save_configuration()
+    driver.reset_grippers()
+    assert driver.load_previous_configuration()
 
 
 def test_driver_rejects_loading_invalid_configuration(ros2):
@@ -112,6 +142,7 @@ def test_driver_overwrites_grippers_when_loading_configuration():
     # Save a defined configuration
     driver.reset_grippers()
     saved_config = {
+        "gripper_id": "abc",
         "host": "0.0.0.0",
         "port": 1,
         "serial_port": "some",
@@ -124,7 +155,13 @@ def test_driver_overwrites_grippers_when_loading_configuration():
     # Add some grippers to overwrite
     device_ids = [1, 2, 3, 4, 5]
     for device in device_ids:
-        config = {"host": "", "port": 0, "serial_port": "abc", "device_id": device}
+        config = {
+            "gripper_id": "abc",
+            "host": "",
+            "port": 0,
+            "serial_port": "abc",
+            "device_id": device,
+        }
         assert driver.add_gripper(**config)
 
     # We should have the one stored initially
@@ -139,7 +176,16 @@ def test_driver_keeps_current_grippers_when_loading_invalid_configuration():
 
     # Store two identical grippers to obtain an invalid configuration file
     driver.reset_grippers()
-    gripper = {"host": "a", "port": 0, "serial_port": "/", "device_id": 42}
+    gripper = Gripper(
+        {
+            "gripper_id": "",
+            "host": "a",
+            "port": 0,
+            "serial_port": "/",
+            "device_id": 42,
+            "driver": GripperDriver(),
+        }
+    )
     for _ in range(2):
         driver.grippers.append(gripper)
     assert driver.save_configuration()

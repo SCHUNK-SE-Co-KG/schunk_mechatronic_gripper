@@ -92,7 +92,7 @@ def test_driver_offers_gpe_specific_services(ros2):
         },
     }
     for module, services in module_expectations.items():
-        driver.grippers[0]["driver"].module = module
+        driver.grippers[0]["driver"].module_type = module
         driver.on_activate(state=None)
 
         for srv_suffix, expected_type in services.items():

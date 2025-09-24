@@ -650,7 +650,7 @@ def test_driver_implements_loading_previous_configuration(driver):
     assert client.wait_for_service(timeout_sec=2)
 
     # Store a valid configuration
-    config = {"host": "0.0.0.0", "port": 80}
+    config = {"gripper_id": "abc", "host": "0.0.0.0", "port": 80}
     location = Path("/var/tmp/schunk_gripper")
     with open(location.joinpath("configuration.json"), "w") as f:
         json.dump([config], f)

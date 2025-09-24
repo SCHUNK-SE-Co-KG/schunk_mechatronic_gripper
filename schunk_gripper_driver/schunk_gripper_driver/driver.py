@@ -198,6 +198,23 @@ class Driver(Node):
                 devices.append(id)
         return devices
 
+    def get_unique_id(self, gripper: str) -> str:
+        known_ids = [entry["gripper_id"] for entry in self.grippers]
+
+        def increment(name: str) -> str:
+            if name.split("_")[-1].isdigit():
+                count = int(name.split("_")[-1]) + 1
+                name = "_".join(name.split("_")[:-1])
+                name += f"_{count}"
+            else:
+                name = f"{name}_1"
+            return name
+
+        unique_id = increment(gripper)
+        while unique_id in known_ids:
+            unique_id = increment(unique_id)
+        return unique_id
+
     def show_configuration(self) -> list[GripperConfig]:
         configuration = []
         for gripper in self.grippers:
@@ -229,6 +246,7 @@ class Driver(Node):
             configuration = []
             for gripper in self.grippers:
                 entry: OrderedDict[str, str | int] = OrderedDict()
+                entry["gripper_id"] = gripper["gripper_id"]
                 entry["host"] = gripper["host"]
                 entry["port"] = gripper["port"]
                 entry["serial_port"] = gripper["serial_port"]
@@ -274,7 +292,12 @@ class Driver(Node):
         return True
 
     def add_gripper(
-        self, host: str = "", port: int = 0, serial_port: str = "", device_id: int = 0
+        self,
+        gripper_id: str = "",
+        host: str = "",
+        port: int = 0,
+        serial_port: str = "",
+        device_id: int = 0,
     ) -> bool:
         LOG_NS = "Add gripper:"
         if not any([host, port, serial_port, device_id]):
@@ -306,14 +329,28 @@ class Driver(Node):
                         f"{LOG_NS} serial_port and device_id already used"
                     )
                     return False
+
+        driver = GripperDriver()
+        if not gripper_id:
+            if not driver.connect(
+                host=host,
+                port=port,
+                serial_port=serial_port,
+                device_id=device_id,
+                update_cycle=None,
+            ):
+                return False
+            gripper_id = self.get_unique_id(driver.gripper_type)
+            driver.disconnect()
+
         self.grippers.append(
             {
                 "host": host,
                 "port": port,
                 "serial_port": serial_port,
                 "device_id": device_id,
-                "driver": GripperDriver(),
-                "gripper_id": "",
+                "driver": driver,
+                "gripper_id": gripper_id,
             }
         )
         return True
@@ -338,42 +375,30 @@ class Driver(Node):
             return TransitionCallbackReturn.FAILURE
         self.scheduler.start()
 
-        # Connect each gripper
+        # Try to connect each gripper
         for idx, gripper in enumerate(self.grippers):
             driver = GripperDriver()
-            if self.needs_synchronize(gripper):
-                update_cycle = None
-            else:
-                update_cycle = 0.05
-            if not driver.connect(
+            driver.connect(
                 host=gripper["host"],
                 port=gripper["port"],
                 serial_port=gripper["serial_port"],
                 device_id=gripper["device_id"],
-                update_cycle=update_cycle,
-            ):
-                self.get_logger().warn(f"Gripper connect failed: {gripper}")
-                return TransitionCallbackReturn.FAILURE
-            else:
-                self.grippers[idx]["driver"] = driver
+                update_cycle=None,
+            )
+            self.grippers[idx]["driver"] = driver
 
-        # Set unique gripper IDs
-        devices = []
+        # Update empty gripper IDs
         for idx, gripper in enumerate(self.grippers):
-            id = f"{gripper['driver'].gripper}_1"
-            while id in devices:
-                count = int(id.split("_")[-1]) + 1
-                id = id[:-2] + f"_{count}"
-            devices.append(id)
-            self.grippers[idx]["gripper_id"] = id
+            if not gripper["gripper_id"]:
+                self.grippers[idx]["gripper_id"] = self.get_unique_id(
+                    gripper=gripper["driver"].gripper_type
+                )
 
-        # Start cyclic updates for each gripper
+        # Start cyclic updates with reconnect mechanism for each gripper
         for idx, _ in enumerate(self.grippers):
             gripper = self.grippers[idx]
-            if self.needs_synchronize(gripper):
-                self.scheduler.cyclic_execute(
-                    func=partial(gripper["driver"].receive_plc_input), cycle_time=0.05
-                )
+            scheduler = self.scheduler if self.needs_synchronize(gripper) else None
+            gripper["driver"].start_module_updates(scheduler=scheduler)
 
         # Start info services
         self.list_grippers_srv = self.create_service(
@@ -399,16 +424,12 @@ class Driver(Node):
     def on_activate(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().debug("on_activate() is called.")
 
-        # Get every gripper ready to go
+        # Get available grippers ready to go
         for idx, gripper in enumerate(self.grippers):
             if self.needs_synchronize(gripper):
-                success = self.grippers[idx]["driver"].acknowledge(
-                    scheduler=self.scheduler
-                )
+                self.grippers[idx]["driver"].acknowledge(scheduler=self.scheduler)
             else:
-                success = self.grippers[idx]["driver"].acknowledge()
-            if not success:
-                return TransitionCallbackReturn.FAILURE
+                self.grippers[idx]["driver"].acknowledge()
 
         # Gripper-specific services
         for idx, _ in enumerate(self.grippers):
@@ -589,10 +610,11 @@ class Driver(Node):
 
     def on_cleanup(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().debug("on_cleanup() is called.")
-        self.scheduler.stop()
         for gripper in self.grippers:
             gripper["driver"].disconnect()
             gripper["driver"] = GripperDriver()
+
+        self.scheduler.stop()
 
         # Release info services
         if not self.destroy_service(self.list_grippers_srv):
@@ -840,7 +862,7 @@ class Driver(Node):
                 cfg.host = host
                 cfg.port = port
                 response.connections.append(cfg)
-                response.grippers.append(driver.gripper)
+                response.grippers.append(driver.gripper_type)
                 driver.disconnect()
 
         return response
