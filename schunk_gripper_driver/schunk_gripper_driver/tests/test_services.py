@@ -728,3 +728,48 @@ def test_driver_implements_start_and_stop_jogging(lifecycle_interface):
 
     driver.change_state(Transition.TRANSITION_DEACTIVATE)
     driver.change_state(Transition.TRANSITION_CLEANUP)
+
+
+@skip_without_gripper
+def test_driver_implements_brake_test(lifecycle_interface):
+    driver = lifecycle_interface
+
+    node = Node("check_brake_test")
+    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
+    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
+    assert add_client.wait_for_service(timeout_sec=2)
+    assert reset_client.wait_for_service(timeout_sec=2)
+
+    # Reset grippers
+    reset_req = Trigger.Request()
+    future = reset_client.call_async(reset_req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    # Add TCP/IP gripper
+    add_req = AddGripper.Request()
+    add_req.gripper.host = "0.0.0.0"
+    add_req.gripper.port = 8000
+    future = add_client.call_async(add_req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    for gripper in driver.list_grippers():
+        brake_service_name = f"/schunk/driver/{gripper}/brake_test"
+        brake_client = node.create_client(Trigger, brake_service_name)
+        assert brake_client.wait_for_service(
+            timeout_sec=5
+        ), f"{gripper}: brake_test service unavailable"
+
+        req = Trigger.Request()
+        future = brake_client.call_async(req)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=5)
+
+        assert future.result().success
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+    node.destroy_node()
