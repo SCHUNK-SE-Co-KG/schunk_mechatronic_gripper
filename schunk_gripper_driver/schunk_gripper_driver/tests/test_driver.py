@@ -757,3 +757,11 @@ def test_driver_offers_callback_for_locating_grippers(ros2: None):
     req.gripper.port = 8000
     result = driver._locate_gripper_cb(request=req, response=res)
     assert result.success
+
+    # Non-existent gripper
+    req = LocateGripper.Request()
+    res = LocateGripper.Response()
+    req.gripper.host = "1.2.3.4"
+    req.gripper.port = 1234
+    result = driver._locate_gripper_cb(request=req, response=res)
+    assert not result.success

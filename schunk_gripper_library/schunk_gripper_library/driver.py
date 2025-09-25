@@ -587,6 +587,8 @@ class Driver(object):
 
         def do() -> bool:
             step = 2000  # um
+            if not self.receive_plc_input():
+                return False
             if self.get_actual_position() > self.module_parameters["max_pos"] - step:
                 move(-step)
                 move(step)

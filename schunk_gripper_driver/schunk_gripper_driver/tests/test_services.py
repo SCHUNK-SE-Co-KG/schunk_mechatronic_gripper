@@ -22,6 +22,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     AddGripper,
     ShowConfiguration,
     ShowGripperSpecification,
+    LocateGripper,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -775,3 +776,16 @@ def test_driver_implements_brake_test(lifecycle_interface):
     driver.change_state(Transition.TRANSITION_DEACTIVATE)
     driver.change_state(Transition.TRANSITION_CLEANUP)
     node.destroy_node()
+
+
+@skip_without_gripper
+def test_driver_implements_locating_gripper(driver):
+
+    node = Node("check_locate_gripper")
+    client = node.create_client(LocateGripper, "/schunk/driver/locate_gripper")
+    assert client.wait_for_service(timeout_sec=2)
+
+    req = LocateGripper.Request()
+    future = client.call_async(req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success

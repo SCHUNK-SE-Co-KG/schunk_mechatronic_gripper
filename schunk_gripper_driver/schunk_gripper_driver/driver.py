@@ -922,7 +922,18 @@ class Driver(Node):
     def _locate_gripper_cb(
         self, request: LocateGripper.Request, response: LocateGripper.Response
     ):
-        response.success = True
+        self.get_logger().debug("---> Locate gripper")
+        driver = GripperDriver()
+        driver.connect(
+            host=request.gripper.host,
+            port=request.gripper.port,
+            serial_port=request.gripper.serial_port,
+            device_id=request.gripper.device_id,
+            update_cycle=None,
+        )
+        driver.acknowledge()
+        response.success = driver.twitch_jaws()
+        driver.disconnect()
         return response
 
     def _acknowledge_cb(
