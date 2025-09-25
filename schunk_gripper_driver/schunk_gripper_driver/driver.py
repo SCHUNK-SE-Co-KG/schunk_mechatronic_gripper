@@ -41,6 +41,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     ShowConfiguration,
     ShowGripperSpecification,
     ScanGrippers,
+    LocateGripper,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -147,6 +148,11 @@ class Driver(Node):
             ScanGrippers,
             "~/scan",
             self._scan_grippers_cb,
+        )
+        self.locate_gripper_srv = self.create_service(
+            LocateGripper,
+            "~/locate_gripper",
+            self._locate_gripper_cb,
         )
         self.add_on_set_parameters_callback(self._param_cb)
 
@@ -411,6 +417,7 @@ class Driver(Node):
         self.destroy_service(self.show_configuration_srv)
         self.destroy_service(self.load_previous_configuration_srv)
         self.destroy_service(self.scan_grippers_srv)
+        self.destroy_service(self.locate_gripper_srv)
 
         if self.headless:
             self.get_logger().debug(
@@ -648,6 +655,11 @@ class Driver(Node):
             ScanGrippers,
             "~/scan",
             self._scan_grippers_cb,
+        )
+        self.locate_gripper_srv = self.create_service(
+            LocateGripper,
+            "~/locate_gripper",
+            self._locate_gripper_cb,
         )
 
         return TransitionCallbackReturn.SUCCESS
@@ -905,6 +917,23 @@ class Driver(Node):
         response.specification.ip_address = spec["ip_address"]
         response.success = True
         response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _locate_gripper_cb(
+        self, request: LocateGripper.Request, response: LocateGripper.Response
+    ):
+        self.get_logger().debug("---> Locate gripper")
+        driver = GripperDriver()
+        driver.connect(
+            host=request.gripper.host,
+            port=request.gripper.port,
+            serial_port=request.gripper.serial_port,
+            device_id=request.gripper.device_id,
+            update_cycle=None,
+        )
+        driver.acknowledge()
+        response.success = driver.twitch_jaws()
+        driver.disconnect()
         return response
 
     def _acknowledge_cb(

@@ -13,19 +13,20 @@ find_package(std_msgs REQUIRED)
 rosidl_generate_interfaces(
   ${PROJECT_NAME}
     srv/AddGripper.srv
+    srv/Grip.srv
+    srv/GripAtPosition.srv
+    srv/GripAtPositionWithGPE.srv
+    srv/GripAtPositionWithVelocity.srv
+    srv/GripAtPositionWithVelocityAndGPE.srv
+    srv/GripWithGPE.srv
+    srv/GripWithVelocity.srv
+    srv/GripWithVelocityAndGPE.srv
     srv/ListGrippers.srv
+    srv/LocateGripper.srv
     srv/MoveToAbsolutePosition.srv
     srv/MoveToAbsolutePositionGPE.srv
     srv/MoveToRelativePosition.srv
     srv/MoveToRelativePositionGPE.srv
-    srv/Grip.srv
-    srv/GripWithGPE.srv
-    srv/GripAtPosition.srv
-    srv/GripAtPositionWithGPE.srv
-    srv/GripWithVelocity.srv
-    srv/GripWithVelocityAndGPE.srv
-    srv/GripAtPositionWithVelocity.srv
-    srv/GripAtPositionWithVelocityAndGPE.srv
     srv/Release.srv
     srv/ScanGrippers.srv
     srv/ShowConfiguration.srv

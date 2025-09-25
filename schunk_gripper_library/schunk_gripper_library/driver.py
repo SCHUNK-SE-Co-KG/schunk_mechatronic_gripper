@@ -574,6 +574,33 @@ class Driver(object):
         else:
             return do()
 
+    def twitch_jaws(self, scheduler: Scheduler | None = None) -> bool:
+        if not self.connected:
+            return False
+
+        def move(step: int) -> bool:
+            return self.move_to_position(
+                position=step,
+                velocity=self.module_parameters["max_vel"],
+                is_absolute=False,
+            )
+
+        def do() -> bool:
+            step = 2000  # um
+            if not self.receive_plc_input():
+                return False
+            if self.get_actual_position() > self.module_parameters["max_pos"] - step:
+                move(-step)
+                move(step)
+            move(step)
+            move(-step)
+            return True
+
+        if scheduler:
+            return scheduler.execute(func=partial(do)).result()
+        else:
+            return do()
+
     def receive_plc_input(self) -> bool:
         with self.input_buffer_lock:
             data = self.read_module_parameter(self.plc_input)
