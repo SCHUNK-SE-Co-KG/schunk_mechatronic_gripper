@@ -655,7 +655,7 @@ class Driver(object):
                         slave=self.mb_device_id,
                         no_response_expected=False,
                     )
-                except ModbusIOException:
+                except (ModbusIOException, IOError):
                     return result
 
             # Parse each 2-byte register,
