@@ -138,6 +138,15 @@ def test_driver_handles_pymodbus_exceptions_during_polling(simulate_pymodbus_fai
     time.sleep(driver.reconnect_interval)
     assert driver.connected
 
+    # Check OSError when pulling the USB-RS485 cable
+    simulate_pymodbus_failure["exception"] = OSError("Someone pulled the cable")
+    time.sleep(0.5)
+    assert driver.polling_thread.is_alive()
+    assert not driver.connected
+    simulate_pymodbus_failure["exception"] = None
+    time.sleep(driver.reconnect_interval)
+    assert driver.connected
+
     driver.disconnect()
 
 
