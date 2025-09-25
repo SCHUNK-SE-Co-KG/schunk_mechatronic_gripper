@@ -44,6 +44,8 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     LocateGripper,
     ReadGripperParameter,
     WriteGripperParameter,
+    Stop,
+    StopWithGPE,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -596,9 +598,11 @@ class Driver(Node):
 
             self.gripper_services.append(
                 self.create_service(
-                    Trigger,
-                    f"~/{gripper_id}/stop",
-                    partial(self._stop_cb, gripper=gripper),
+                    srv_type=(
+                        StopWithGPE if gripper["driver"].gpe_available() else Stop
+                    ),
+                    srv_name=f"~/{gripper_id}/stop",
+                    callback=partial(self._stop_cb, gripper=gripper),
                     callback_group=self.gripper_services_cb_group,
                 )
             )
@@ -985,15 +989,17 @@ class Driver(Node):
 
     def _stop_cb(
         self,
-        request: Trigger.Request,
-        response: Trigger.Response,
+        request: Any,
+        response: Any,
         gripper: Gripper,
     ):
         self.get_logger().debug("---> Stop")
-        if self.needs_synchronize(gripper):
-            response.success = gripper["driver"].stop(scheduler=self.scheduler)
-        else:
-            response.success = gripper["driver"].stop()
+        use_gpe = getattr(request, "use_gpe", False)
+        scheduler = self.scheduler if self.needs_synchronize(gripper) else None
+        response.success = gripper["driver"].stop(
+            scheduler=scheduler,
+            use_gpe=use_gpe,
+        )
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
