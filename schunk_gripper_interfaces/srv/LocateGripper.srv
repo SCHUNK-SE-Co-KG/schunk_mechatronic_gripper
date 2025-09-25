@@ -1,0 +1,4 @@
+Gripper gripper
+---
+bool success
+string message
