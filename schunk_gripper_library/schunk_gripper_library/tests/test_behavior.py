@@ -287,3 +287,58 @@ def test_brake_test():
     assert duration > 4.0  # sec
 
     assert driver.disconnect()
+
+
+@skip_without_gripper
+def test_twitching_jaws_leaves_gripper_where_it_is():
+    driver = Driver()
+
+    # When not connected
+    assert not driver.twitch_jaws()
+
+    # Only web dummy for now.
+    # The BKS firmware has inconsistent accuracy for motion commands
+    assert driver.connect(host="0.0.0.0", port=8000, update_cycle=None)
+    driver.acknowledge()
+
+    max_pos = driver.module_parameters["max_pos"]
+    min_pos = driver.module_parameters["min_pos"]
+    half = int(0.5 * (max_pos - min_pos))
+    driver.move_to_position(
+        position=half, velocity=driver.module_parameters["max_vel"], is_absolute=True
+    )
+
+    before = driver.get_actual_position()
+    assert driver.twitch_jaws()
+    after = driver.get_actual_position()
+    assert after == before
+
+    driver.disconnect()
+
+
+@skip_without_gripper
+def test_twitching_jaws_considers_limits():
+    driver = Driver()
+
+    # Only on Modbus.
+    # Whe need to check with realistic limits
+    assert driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
+    driver.acknowledge()
+
+    # When fully open
+    driver.move_to_position(
+        position=driver.module_parameters["max_pos"],
+        velocity=driver.module_parameters["max_vel"],
+        is_absolute=True,
+    )
+    assert driver.twitch_jaws()
+
+    # When fully closed
+    driver.move_to_position(
+        position=driver.module_parameters["min_pos"],
+        velocity=driver.module_parameters["max_vel"],
+        is_absolute=True,
+    )
+    assert driver.twitch_jaws()
+
+    driver.disconnect()
