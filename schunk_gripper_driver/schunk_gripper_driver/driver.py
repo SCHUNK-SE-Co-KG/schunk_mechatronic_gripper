@@ -555,6 +555,15 @@ class Driver(Node):
                 )
             )
 
+            self.gripper_services.append(
+                self.create_service(
+                    Trigger,
+                    f"~/{gripper_id}/brake_test",
+                    partial(self._brake_test_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+
         # Publishers for each gripper
         for idx, _ in enumerate(self.grippers):
             gripper = self.grippers[idx]
@@ -1022,6 +1031,19 @@ class Driver(Node):
             scheduler=self.scheduler if self.needs_synchronize(gripper) else None,
         )
 
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _brake_test_cb(
+        self,
+        request: Trigger.Request,
+        response: Trigger.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Brake test")
+        response.success = gripper["driver"].brake_test(
+            scheduler=self.scheduler if self.needs_synchronize(gripper) else None,
+        )
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 

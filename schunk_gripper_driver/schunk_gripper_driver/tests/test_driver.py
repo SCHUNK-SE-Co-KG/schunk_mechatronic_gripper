@@ -715,3 +715,23 @@ def test_driver_uses_a_dedicated_thread_for_connection_status(ros2):
 
     driver.on_shutdown(state=None)
     assert not driver.connection_status_thread.is_alive()
+
+
+@skip_without_gripper
+def test_driver_offers_callback_for_brake_test(ros2: None):
+    driver = Driver("driver")
+    driver.on_configure(state=None)
+    driver.on_activate(state=None)
+
+    req = Trigger.Request()
+    res = Trigger.Response()
+    for idx, _ in enumerate(driver.grippers):
+        gripper = driver.grippers[idx]
+        gripper_id = gripper["gripper_id"]
+        assert driver._brake_test_cb(
+            request=req, response=res, gripper=gripper
+        ), f"gripper_id: {gripper_id}"
+        assert not res.success
+
+    driver.on_deactivate(state=None)
+    driver.on_cleanup(state=None)

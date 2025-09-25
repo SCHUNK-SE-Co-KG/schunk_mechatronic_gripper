@@ -1,6 +1,7 @@
 from schunk_gripper_library.driver import Driver
 from schunk_gripper_library.utility import skip_without_gripper, Scheduler
 import pytest
+import time
 
 
 @skip_without_gripper
@@ -262,3 +263,27 @@ def test_release():
             assert driver.release(use_gpe=True)
 
         assert driver.disconnect()
+
+
+@skip_without_gripper
+def test_brake_test():
+    driver = Driver()
+
+    # TCP/IP
+    assert driver.connect(host="0.0.0.0", port=8000)
+    assert driver.acknowledge()
+    assert driver.brake_test()
+    driver.disconnect()
+
+    # Modbus
+    assert driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
+    assert driver.acknowledge()
+
+    # Check that we give sufficient time for real modules to carry out the brake test.
+    # We measured this on the real modules.
+    start = time.time()
+    driver.brake_test()  # fails in simulation
+    duration = time.time() - start
+    assert duration > 4.0  # sec
+
+    assert driver.disconnect()
