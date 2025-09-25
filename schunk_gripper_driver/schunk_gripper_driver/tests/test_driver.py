@@ -26,6 +26,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     StartJogging,
     StartJoggingGPE,
     ShowGripperSpecification,
+    LocateGripper,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -735,3 +736,24 @@ def test_driver_offers_callback_for_brake_test(ros2: None):
 
     driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
+
+
+@skip_without_gripper
+def test_driver_offers_callback_for_locating_grippers(ros2: None):
+    driver = Driver("driver")
+
+    # Modbus
+    req = LocateGripper.Request()
+    res = LocateGripper.Response()
+    req.gripper.serial_port = "/dev/ttyUSB0"
+    req.gripper.device_id = 12
+    result = driver._locate_gripper_cb(request=req, response=res)
+    assert result.success
+
+    # TCP/IP
+    req = LocateGripper.Request()
+    res = LocateGripper.Response()
+    req.gripper.host = "0.0.0.0"
+    req.gripper.port = 8000
+    result = driver._locate_gripper_cb(request=req, response=res)
+    assert result.success
