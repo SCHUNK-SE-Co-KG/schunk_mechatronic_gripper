@@ -1,6 +1,5 @@
 from schunk_gripper_library.driver import Driver
 from schunk_gripper_library.utility import skip_without_gripper, Scheduler
-import pytest
 import time
 
 
@@ -237,7 +236,8 @@ def test_stop():
         )
         assert driver.acknowledge()
 
-        assert driver.stop(), f"driver status: {driver.get_status_diagnostics()}"
+        assert driver.stop(use_gpe=False)
+        assert driver.stop(use_gpe=True)
         assert driver.disconnect()
 
 

@@ -268,7 +268,7 @@ class Driver(object):
         else:
             return do()
 
-    def stop(self, scheduler: Scheduler | None = None) -> bool:
+    def stop(self, use_gpe: bool = False, scheduler: Scheduler | None = None) -> bool:
         if not self.connected:
             return False
 
@@ -277,6 +277,10 @@ class Driver(object):
             self.send_plc_output()
             cmd_toggle_before = self.get_status_bit(bit=5)
             self.set_control_bit(bit=1, value=True)
+            if self.gpe_available():
+                self.set_control_bit(bit=31, value=use_gpe)
+            else:
+                self.set_control_bit(bit=31, value=False)
             self.send_plc_output()
             desired_bits = {"5": cmd_toggle_before ^ 1, "4": 1}
             return self.wait_for_status(bits=desired_bits)
