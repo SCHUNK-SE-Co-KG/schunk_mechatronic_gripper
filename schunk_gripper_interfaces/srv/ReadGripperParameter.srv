@@ -1,0 +1,15 @@
+string parameter  # Module parameter in hex, e.g. "0x0380"
+---
+bool success
+string message
+
+# Return types depend on the parameter.
+# Only one array will be filled.
+bool[]    value_bool
+uint8[]   value_uint8
+uint16[]  value_uint16
+uint32[]  value_uint32
+int32[]   value_int32
+float32[] value_float
+char[]    value_char
+uint8[]   value_enum
