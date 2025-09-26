@@ -66,6 +66,7 @@ import json
 from collections import OrderedDict
 import time
 from typing import Any
+import re
 
 
 class Gripper(TypedDict):
@@ -1102,8 +1103,19 @@ class Driver(Node):
         else:
             data = gripper["driver"].read_module_parameter(request.parameter)
 
-        response.success = True if data else False
-        response.value_enum.append(42)
+        values, value_type = gripper["driver"].decode_module_parameter(
+            data=data, param=request.parameter
+        )
+
+        # Find the corresponding message field for this type
+        # and assign the values to it if existent.
+        msg_field = f"value_{re.split(r'[^a-z]', value_type)[0]}"
+        if getattr(response, msg_field, None) is not None:
+            setattr(response, msg_field, values)
+            response.success = True
+        else:
+            response.success = False
+
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 

@@ -79,7 +79,17 @@ def test_driver_offers_reading_gripper_parameters(lifecycle_interface):
             rclpy.spin_until_future_complete(node, future, timeout_sec=1)
             return future.result()
 
-        # Valid parameter
-        result = read("0x0500")  # enum return type
+        # Wrong usage shouldn't crash the driver
+        invalid_params = ["", "0", "0x0", "<actual_pos>"]
+        for param in invalid_params:
+            result = read(param)
+            assert not result.success
+
+        # Some valid parameters
+        result = read("0x0500")  # enum
         assert result.success
-        assert result.value_enum[0] == 42
+        assert len(result.value_enum) >= 1
+
+        result = read("0x0630")  # float
+        assert result.success
+        assert len(result.value_float) >= 1
