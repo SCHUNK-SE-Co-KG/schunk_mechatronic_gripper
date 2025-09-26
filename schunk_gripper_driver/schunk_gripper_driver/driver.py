@@ -42,6 +42,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     ShowGripperSpecification,
     ScanGrippers,
     LocateGripper,
+    ReadGripperParameter,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -567,6 +568,14 @@ class Driver(Node):
                     Trigger,
                     f"~/{gripper_id}/brake_test",
                     partial(self._brake_test_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+            self.gripper_services.append(
+                self.create_service(
+                    ReadGripperParameter,
+                    f"~/{gripper_id}/read_parameter",
+                    None,
                     callback_group=self.gripper_services_cb_group,
                 )
             )
