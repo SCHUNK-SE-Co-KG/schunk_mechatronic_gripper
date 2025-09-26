@@ -575,7 +575,7 @@ class Driver(Node):
                 self.create_service(
                     ReadGripperParameter,
                     f"~/{gripper_id}/read_parameter",
-                    None,
+                    partial(self._read_gripper_parameter_cb, gripper=gripper),
                     callback_group=self.gripper_services_cb_group,
                 )
             )
@@ -1082,6 +1082,18 @@ class Driver(Node):
         response.success = gripper["driver"].brake_test(
             scheduler=self.scheduler if self.needs_synchronize(gripper) else None,
         )
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _read_gripper_parameter_cb(
+        self,
+        request: ReadGripperParameter.Request,
+        response: ReadGripperParameter.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Read gripper parameter")
+        response.success = True
+        response.value_uint16.append(42)
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
