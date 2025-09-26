@@ -1,5 +1,5 @@
 {
-    "0x0040": {"name": "plc_input", "registers": 8, "type": "uint32 int32 uint32 uint32"},
+    "0x0040": {"name": "plc_input", "registers": 8, "type": "struct(uint32 int32 uint32 uint32)"},
     "0x0500": {"name": "module_type", "registers": 1, "type": "enum"},
     "0x0540": {"name": "wp_release_delta", "registers": 2, "type": "float"},
     "0x0600": {"name": "min_pos", "registers": 2, "type": "float"},

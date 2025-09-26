@@ -162,3 +162,52 @@ def test_driver_offers_clearing_internal_module_parameters():
             assert driver.clear_module_parameters()
             for key, value in driver.module_parameters.items():
                 assert value is None, f"key: {key}"
+
+
+@skip_without_gripper
+def test_driver_offers_decoding_module_parameters():
+    driver = Driver()
+
+    # When not connected
+    values, value_type = driver.decode_module_parameter(
+        data=bytearray(bytes.fromhex("aabb")), param="0x0500"
+    )
+    assert values == ()
+    assert value_type == ""
+
+    # When connected
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        driver.connect(
+            host=host,
+            port=port,
+            serial_port=serial_port,
+            device_id=12,
+            update_cycle=None,
+        )
+
+        # Empty data
+        values, value_type = driver.decode_module_parameter(
+            data=bytearray(), param="0x0500"
+        )
+        assert values == ()
+        assert value_type == ""
+
+        # Invalid parameters
+        invalid_params = ["", "0500", "-1", "0x0"]
+        data = bytearray(bytes.fromhex("aabbccdd"))
+        for param in invalid_params:
+            values, value_type = driver.decode_module_parameter(data=data, param=param)
+            assert values == ()
+            assert value_type == ""
+
+        # Valid parameters
+        for key, value in driver.readable_parameters.items():
+            if value["type"].startswith("struct"):
+                continue  # not supported yet
+
+            data = driver.read_module_parameter(param=key)
+            values, value_type = driver.decode_module_parameter(data=data, param=key)
+            assert len(values) >= 1
+            assert value_type == value["type"]

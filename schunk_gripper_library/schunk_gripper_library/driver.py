@@ -14,6 +14,7 @@ from functools import partial
 from pymodbus.logging import Log
 import serial  # type: ignore [import-untyped]
 from pymodbus.exceptions import ModbusIOException
+from typing import Any
 
 
 class NonExclusiveSerialClient(ModbusSerialClient):
@@ -770,6 +771,38 @@ class Driver(object):
             return response.is_success
 
         return False
+
+    def decode_module_parameter(
+        self, data: bytearray, param: str
+    ) -> tuple[tuple[Any, ...], str]:
+        error: tuple[tuple[Any, ...], str] = (tuple(), "")
+        if not self.connected:
+            return error
+        if not data:
+            return error
+        if param not in self.readable_parameters:
+            return error
+
+        value_type = str(self.readable_parameters[param]["type"])
+
+        if value_type == "enum":
+            values = struct.unpack("h", data)
+
+        elif value_type.startswith("char"):
+            count = len(data)
+            values = struct.unpack(f"{count}c", data)
+
+        elif value_type.startswith("float"):
+            count = len(data) // 4
+            if self.fieldbus == "PN":
+                values = struct.unpack(f"{count}f", data[::-1])
+            else:
+                values = struct.unpack(f"{count}f", data)
+
+        else:
+            return error
+
+        return (values, value_type)
 
     def wait_for_status(
         self, bits: dict[str, int] = {}, timeout_sec: float = 1.0
