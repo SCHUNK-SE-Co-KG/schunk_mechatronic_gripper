@@ -728,6 +728,8 @@ class Driver(object):
                 except (ReadTimeout, ConnectError, ConnectTimeout):
                     return result
             if response.is_success:
+                if response.json() == []:
+                    return result
                 result = bytearray(bytes.fromhex(response.json()[0]))
 
         if result:
@@ -788,9 +790,16 @@ class Driver(object):
         if value_type == "enum":
             values = struct.unpack("h", data)
 
+        elif value_type == "bool":
+            values = struct.unpack("?", data[:1])
+
         elif value_type.startswith("char"):
             count = len(data)
             values = struct.unpack(f"{count}c", data)
+
+        elif value_type.startswith("uint8"):
+            count = len(data)
+            values = struct.unpack(f"{count}B", data)
 
         elif value_type.startswith("float"):
             count = len(data) // 4
@@ -798,6 +807,20 @@ class Driver(object):
                 values = struct.unpack(f"{count}f", data[::-1])
             else:
                 values = struct.unpack(f"{count}f", data)
+
+        elif value_type.startswith("uint16"):
+            count = len(data) // 2
+            if self.fieldbus == "PN":
+                values = struct.unpack(f"{count}H", data[::-1])
+            else:
+                values = struct.unpack(f"{count}H", data)
+
+        elif value_type.startswith("uint32"):
+            count = len(data) // 4
+            if self.fieldbus == "PN":
+                values = struct.unpack(f"{count}I", data[::-1])
+            else:
+                values = struct.unpack(f"{count}I", data)
 
         else:
             return error

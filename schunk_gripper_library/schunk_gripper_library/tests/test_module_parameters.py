@@ -40,8 +40,19 @@ def test_driver_supports_reading_module_parameters():
     ):
         driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
         for key, value in driver.readable_parameters.items():
+
+            # Ethernet-based grippers don't have a baudrate nor slave id
+            if host and key in ["0x11A0", "0x11A8"]:
+                continue
+
+            # Modbus grippers don't have a mac address
+            if not host and key in ["0x1138"]:
+                continue
+
             result = driver.read_module_parameter(key)
-            assert len(result) == value["registers"] * 2  # two bytes per register
+
+            # Two bytes per register
+            assert len(result) == value["registers"] * 2, f"host: {host}, param: {key}"
         driver.disconnect()
 
 
@@ -187,6 +198,42 @@ def test_driver_offers_decoding_module_parameters():
             update_cycle=None,
         )
 
+        # Valid parameters
+        for key, value in driver.readable_parameters.items():
+            if value["type"].startswith("struct"):
+                continue  # not supported yet
+
+            # Ethernet-based grippers don't have a baudrate nor slave id
+            if host and key in ["0x11A0", "0x11A8"]:
+                continue
+
+            # Modbus grippers don't have a mac address
+            if not host and key in ["0x1138"]:
+                continue
+
+            data = driver.read_module_parameter(param=key)
+            values, value_type = driver.decode_module_parameter(data=data, param=key)
+            assert len(values) >= 1, f"host: {host}, param: {key}"
+            assert value_type == value["type"], f"param: {key}"
+
+        driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_survives_decoding_invalid_module_parameters():
+    driver = Driver()
+
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        driver.connect(
+            host=host,
+            port=port,
+            serial_port=serial_port,
+            device_id=12,
+            update_cycle=None,
+        )
+
         # Empty data
         values, value_type = driver.decode_module_parameter(
             data=bytearray(), param="0x0500"
@@ -202,12 +249,4 @@ def test_driver_offers_decoding_module_parameters():
             assert values == ()
             assert value_type == ""
 
-        # Valid parameters
-        for key, value in driver.readable_parameters.items():
-            if value["type"].startswith("struct"):
-                continue  # not supported yet
-
-            data = driver.read_module_parameter(param=key)
-            values, value_type = driver.decode_module_parameter(data=data, param=key)
-            assert len(values) >= 1
-            assert value_type == value["type"]
+        driver.disconnect()
