@@ -19,11 +19,11 @@ from schunk_gripper_driver.driver import Driver
 from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     ReadGripperParameter,
 )
-
 from rclpy.node import Node
 import rclpy
 from pathlib import Path
 import json
+from unittest.mock import patch
 
 # Setup a module-wide grippers configuration
 # and let the driver automatically start into the _active_ state
@@ -41,12 +41,23 @@ with open(location.joinpath("configuration.json"), "w") as f:
 def test_driver_implements_callback_for_reading_gripper_parameters(ros2):
     driver = Driver("driver")
 
+    req = ReadGripperParameter.Request()
+    res = ReadGripperParameter.Response()
+
+    # Check that we can call the interface
     for gripper in driver.grippers:
-        req = ReadGripperParameter.Request()
-        res = ReadGripperParameter.Response()
         assert driver._read_gripper_parameter_cb(
             request=req, response=res, gripper=gripper
         )
+
+    # Check that it also works with the scheduler
+    with patch.object(driver, "needs_synchronize", return_value=True):
+        driver.scheduler.start()
+        for gripper in driver.grippers:
+            assert driver._read_gripper_parameter_cb(
+                request=req, response=res, gripper=gripper
+            )
+        driver.scheduler.stop()
 
 
 @skip_without_gripper
@@ -61,11 +72,14 @@ def test_driver_offers_reading_gripper_parameters(lifecycle_interface):
         )
         assert client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
 
-        req = ReadGripperParameter.Request()
-        req.parameter = "0x0380"  # uint16 return type
-        future = client.call_async(request=req)
-        rclpy.spin_until_future_complete(node, future, timeout_sec=1)
+        def read(param: str) -> ReadGripperParameter.Response:
+            req = ReadGripperParameter.Request()
+            req.parameter = param
+            future = client.call_async(request=req)
+            rclpy.spin_until_future_complete(node, future, timeout_sec=1)
+            return future.result()
 
-        assert future.result()
-        assert future.result().success
-        assert future.result().value_uint16[0] == 42
+        # Valid parameter
+        result = read("0x0500")  # enum return type
+        assert result.success
+        assert result.value_enum[0] == 42

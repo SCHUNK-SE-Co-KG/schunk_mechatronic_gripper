@@ -1092,8 +1092,18 @@ class Driver(Node):
         gripper: Gripper,
     ):
         self.get_logger().debug("---> Read gripper parameter")
-        response.success = True
-        response.value_uint16.append(42)
+
+        if self.needs_synchronize(gripper):
+            data = self.scheduler.execute(
+                func=partial(
+                    gripper["driver"].read_module_parameter, param=request.parameter
+                )
+            ).result()
+        else:
+            data = gripper["driver"].read_module_parameter(request.parameter)
+
+        response.success = True if data else False
+        response.value_enum.append(42)
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
