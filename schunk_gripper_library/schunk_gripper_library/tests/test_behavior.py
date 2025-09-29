@@ -366,3 +366,21 @@ def test_twitching_jaws_considers_limits():
     assert driver.twitch_jaws()
 
     driver.disconnect()
+
+
+@skip_without_gripper
+def test_remove_workpiece():
+    driver = Driver()
+
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+
+        # Not connected
+        assert not driver.remove_workpiece()
+
+        driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
+        assert driver.remove_workpiece()
+        print("Diagnostics:", driver.get_status_diagnostics())
+
+        assert driver.disconnect()

@@ -534,6 +534,30 @@ class Driver(object):
                 return False
             return check()
 
+    def remove_workpiece(self, scheduler: Scheduler | None = None) -> bool:
+        if not self.connected:
+            return False
+
+        def do() -> bool:
+            self.clear_plc_output()
+            self.send_plc_output()
+            cmd_toggle_before = self.get_status_bit(bit=5)
+
+            in_error = self.get_status_bit(bit=7) == 1
+            if not in_error:
+                self.set_control_bit(bit=0, value=True)
+                self.send_plc_output()
+                self.set_control_bit(bit=0, value=False)
+            self.set_control_bit(bit=5, value=True)
+            self.send_plc_output()
+            desired_bits = {"5": cmd_toggle_before ^ 1, "8": 1}
+            return self.wait_for_status(bits=desired_bits)
+
+        if scheduler:
+            return scheduler.execute(func=partial(do)).result()
+        else:
+            return do()
+
     def estimate_duration(
         self,
         release: bool = False,
