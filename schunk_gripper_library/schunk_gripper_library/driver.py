@@ -795,7 +795,8 @@ class Driver(object):
 
         elif value_type.startswith("char"):
             count = len(data)
-            values = struct.unpack(f"{count}c", data)
+            values = struct.unpack(f"{count}B", data)
+            values = ("".join([chr(i) for i in values]).strip(),)
 
         elif value_type.startswith("uint8"):
             count = len(data)

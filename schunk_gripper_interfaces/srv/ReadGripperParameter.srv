@@ -11,5 +11,5 @@ uint16[]  value_uint16
 uint32[]  value_uint32
 int32[]   value_int32
 float32[] value_float
-char[]    value_char
+string[]  value_char
 uint8[]   value_enum

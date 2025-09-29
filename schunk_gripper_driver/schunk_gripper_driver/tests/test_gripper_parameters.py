@@ -93,3 +93,7 @@ def test_driver_offers_reading_gripper_parameters(lifecycle_interface):
         result = read("0x0630")  # float
         assert result.success
         assert len(result.value_float) >= 1
+
+        result = read("0x1000")  # char[16]
+        assert result.success
+        assert len(result.value_char) >= 1

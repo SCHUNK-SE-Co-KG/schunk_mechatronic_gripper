@@ -211,6 +211,10 @@ def test_driver_offers_decoding_module_parameters():
             if not host and key in ["0x1138"]:
                 continue
 
+            # Empty message buffer in simulation
+            if key == "0x0130":
+                continue
+
             data = driver.read_module_parameter(param=key)
             values, value_type = driver.decode_module_parameter(data=data, param=key)
             assert len(values) >= 1, f"host: {host}, param: {key}"
