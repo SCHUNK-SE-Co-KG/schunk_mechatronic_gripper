@@ -1109,7 +1109,7 @@ class Driver(Node):
 
         # Find the corresponding message field for this type
         # and assign the values to it if existent.
-        msg_field = f"value_{re.split(r'[^a-z]', value_type)[0]}"
+        msg_field = f"value_{re.split(r'[^a-z0-9]', value_type)[0]}"
         if getattr(response, msg_field, None) is not None:
             setattr(response, msg_field, values)
             response.success = True

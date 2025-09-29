@@ -97,3 +97,19 @@ def test_driver_offers_reading_gripper_parameters(lifecycle_interface):
         result = read("0x1000")  # char[16]
         assert result.success
         assert len(result.value_char) >= 1
+
+        result = read("0x0380")  # uint16
+        assert result.success
+        assert len(result.value_uint16) >= 1
+
+        result = read("0x1400")  # uint32
+        assert result.success
+        assert len(result.value_uint32) >= 1
+
+        result = read("0x1330")  # bool
+        assert result.success
+        assert len(result.value_bool) >= 1
+
+        result = read("0x03B8")  # float[6]
+        assert result.success
+        assert len(result.value_float) == 6
