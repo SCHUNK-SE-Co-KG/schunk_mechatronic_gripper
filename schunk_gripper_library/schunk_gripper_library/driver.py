@@ -806,6 +806,7 @@ class Driver(object):
             count = len(data) // 4
             if self.fieldbus == "PN":
                 values = struct.unpack(f"{count}f", data[::-1])
+                values = values[::-1]
             else:
                 values = struct.unpack(f"{count}f", data)
 
@@ -813,6 +814,7 @@ class Driver(object):
             count = len(data) // 2
             if self.fieldbus == "PN":
                 values = struct.unpack(f"{count}H", data[::-1])
+                values = values[::-1]
             else:
                 values = struct.unpack(f"{count}H", data)
 
@@ -820,6 +822,7 @@ class Driver(object):
             count = len(data) // 4
             if self.fieldbus == "PN":
                 values = struct.unpack(f"{count}I", data[::-1])
+                values = values[::-1]
             else:
                 values = struct.unpack(f"{count}I", data)
 

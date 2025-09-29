@@ -1,5 +1,6 @@
 from schunk_gripper_library.utility import skip_without_gripper
 from schunk_gripper_library.driver import Driver
+import struct
 
 
 def test_driver_knows_readable_and_writable_module_parameters():
@@ -221,6 +222,46 @@ def test_driver_offers_decoding_module_parameters():
             assert value_type == value["type"], f"param: {key}"
 
         driver.disconnect()
+
+
+def test_driver_keeps_correct_order_when_decoding_arrays():
+    driver = Driver()
+
+    float_array = (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+    uint16_array = (301, 302, 303, 304, 305, 306)
+    uint32_array = (100001, 100002, 100003, 100004, 100005, 100006)
+
+    fake_parameters = {
+        "0x1": {"type": "float[6]"},
+        "0x2": {"type": "uint16[6]"},
+        "0x3": {"type": "uint32[6]"},
+    }
+    driver.readable_parameters = fake_parameters
+    driver.connected = True
+
+    for endianness, fieldbus in zip(["<", ">"], ["", "PN"]):
+        driver.fieldbus = fieldbus
+
+        # Float arrays
+        data = bytearray()
+        for num in float_array:
+            data.extend(struct.pack(f"{endianness}f", num))
+        values, _ = driver.decode_module_parameter(data, param="0x1")
+        assert values == float_array, f"endianness: {endianness}, fieldbus: {fieldbus}"
+
+        # Uint16 arrays
+        data = bytearray()
+        for num in uint16_array:
+            data.extend(struct.pack(f"{endianness}H", num))
+        values, _ = driver.decode_module_parameter(data, param="0x2")
+        assert values == uint16_array, f"endianness: {endianness}, fieldbus: {fieldbus}"
+
+        # Uint32 arrays
+        data = bytearray()
+        for num in uint32_array:
+            data.extend(struct.pack(f"{endianness}I", num))
+        values, _ = driver.decode_module_parameter(data, param="0x3")
+        assert values == uint32_array, f"endianness: {endianness}, fieldbus: {fieldbus}"
 
 
 @skip_without_gripper
