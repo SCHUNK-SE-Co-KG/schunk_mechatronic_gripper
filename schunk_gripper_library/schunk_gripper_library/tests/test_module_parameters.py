@@ -74,19 +74,21 @@ def test_driver_supports_writing_module_parameters():
             assert not driver.write_module_parameter(param, bytearray())
         driver.disconnect()
 
-    # Data arguments must have the correct sizes
     for host, port, serial_port in zip(
         ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
     ):
         driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
 
-        # Correct
+        # Data arguments must have the correct sizes for each parameter.
+        # To make it easy, we just write back the current values.
         for key, value in driver.writable_parameters.items():
-            byte_size = value["registers"] * 2
-            data = bytearray(bytes.fromhex("00" * byte_size))
+            data = driver.read_module_parameter(param=key)
+            if not data:
+                byte_size = value["registers"] * 2
+                data = bytearray(bytes.fromhex("00" * byte_size))
             assert driver.write_module_parameter(key, data)
 
-        # Incorrect
+        # Reject empty data
         for key, value in driver.writable_parameters.items():
             data = bytearray()
             assert not driver.write_module_parameter(key, data)
