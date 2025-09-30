@@ -14,7 +14,7 @@ from functools import partial
 from pymodbus.logging import Log
 import serial  # type: ignore [import-untyped]
 from pymodbus.exceptions import ModbusIOException
-from typing import Any
+from typing import Any, Type, cast
 
 
 class NonExclusiveSerialClient(ModbusSerialClient):
@@ -781,24 +781,27 @@ class Driver(object):
         if not data or param not in self.writable_parameters:
             return result
 
-        param_type = str(self.writable_parameters[param]["type"])
+        type_str = str(self.writable_parameters[param]["type"])
         expected_size = int(self.writable_parameters[param]["registers"]) * 2
         endianness = ">" if self.fieldbus == "PN" else "<"
         encodings = {
-            "bool": "?",
-            "uint8": "B",
-            "uint16": "H",
-            "uint32": "I",
-            "float": "f",
+            "bool": {"char": "?", "type": bool},
+            "uint8": {"char": "B", "type": int},
+            "uint16": {"char": "H", "type": int},
+            "uint32": {"char": "I", "type": int},
+            "float": {"char": "f", "type": float},
         }
-        if param_type not in encodings:
+        if type_str not in encodings:
             return result
-        encoding = encodings[param_type]
+        char = encodings[type_str]["char"]
+        expected_type = cast(Type, encodings[type_str]["type"])
 
         for entry in data:
-            result.extend(struct.pack(f"{endianness}{encoding}", entry))
+            if not isinstance(entry, expected_type):
+                return result
+            result.extend(struct.pack(f"{endianness}{char}", entry))
 
-        while len(result) != expected_size:
+        while len(result) < expected_size:
             result.extend(bytes.fromhex("00"))
 
         return result

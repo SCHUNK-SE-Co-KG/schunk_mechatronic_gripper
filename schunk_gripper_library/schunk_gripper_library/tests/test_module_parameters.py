@@ -339,3 +339,23 @@ def test_driver_offers_encoding_module_parameters():
             assert encoded_data == expected, f"host: {host}, param: {param}"
 
         driver.disconnect()
+
+
+def test_driver_survives_encoding_invalid_module_parameters():
+    driver = Driver()
+    driver.connected = True
+
+    valid_params = [
+        "0x1330",  # bool
+        "0x0528",  # float
+        "0x11A8",  # uint8
+        "0x0380",  # uint16
+        "0x11A0",  # uint32
+    ]
+    invalid_data = [[1.0, 2.0], ["ok", "really?"], [42], [False, True, True]]
+
+    # Sending invalid data to valid parameters shouldn't
+    # crash the driver
+    for param in valid_params:
+        for data in invalid_data:
+            driver.encode_module_parameter(data=data, param=param)
