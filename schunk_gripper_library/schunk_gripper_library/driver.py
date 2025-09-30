@@ -774,6 +774,35 @@ class Driver(object):
 
         return False
 
+    def encode_module_parameter(self, data: list[Any], param: str) -> bytearray:
+        result = bytearray()
+        if not self.connected:
+            return result
+        if not data or param not in self.writable_parameters:
+            return result
+
+        param_type = str(self.writable_parameters[param]["type"])
+        expected_size = int(self.writable_parameters[param]["registers"]) * 2
+        endianness = ">" if self.fieldbus == "PN" else "<"
+        encodings = {
+            "bool": "?",
+            "uint8": "B",
+            "uint16": "H",
+            "uint32": "I",
+            "float": "f",
+        }
+        if param_type not in encodings:
+            return result
+        encoding = encodings[param_type]
+
+        for entry in data:
+            result.extend(struct.pack(f"{endianness}{encoding}", entry))
+
+        while len(result) != expected_size:
+            result.extend(bytes.fromhex("00"))
+
+        return result
+
     def decode_module_parameter(
         self, data: bytearray, param: str
     ) -> tuple[tuple[Any, ...], str]:

@@ -297,3 +297,45 @@ def test_driver_survives_decoding_invalid_module_parameters():
             assert value_type == ""
 
         driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_offers_encoding_module_parameters():
+    driver = Driver()
+
+    # When not connected
+    assert not driver.encode_module_parameter(data=[], param="")
+
+    # Empty arguments
+    driver.connected = True
+    assert not driver.encode_module_parameter(data=[], param="ok")
+    assert not driver.encode_module_parameter(data=[1, 2, 3], param="")
+    driver.connected = False
+
+    # Good cases
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        assert driver.connect(
+            host=host,
+            port=port,
+            serial_port=serial_port,
+            device_id=12,
+            update_cycle=None,
+        )
+
+        # Check the complete round trip of reading and writing parameters
+        for param, _ in driver.writable_parameters.items():
+            expected = driver.read_module_parameter(param=param)
+            values, value_type = driver.decode_module_parameter(
+                data=expected, param=param
+            )
+
+            # Not supported yet
+            if not value_type:
+                continue
+
+            encoded_data = driver.encode_module_parameter(data=values, param=param)
+            assert encoded_data == expected, f"host: {host}, param: {param}"
+
+        driver.disconnect()
