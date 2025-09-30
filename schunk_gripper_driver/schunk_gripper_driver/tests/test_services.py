@@ -58,6 +58,7 @@ def test_driver_advertises_state_depending_services(lifecycle_interface):
         "stop_jogging",
         "brake_test",
         "read_parameter",
+        "write_parameter",
     ]
     until_change_takes_effect = 0.1
 
