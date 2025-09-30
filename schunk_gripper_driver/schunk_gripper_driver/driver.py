@@ -633,6 +633,14 @@ class Driver(Node):
                     srv_type=PrepareForShutdown,
                     srv_name=f"~/{gripper_id}/prepare_for_shutdown",
                     callback=partial(self._prepare_for_shutdown_cb, gripper=gripper),
+                )
+            )
+
+            self.gripper_services.append(
+                self.create_service(
+                    Trigger,
+                    f"~/{gripper_id}/remove_workpiece",
+                    partial(self._remove_workpiece_cb, gripper=gripper),
                     callback_group=self.gripper_services_cb_group,
                 )
             )
@@ -1176,6 +1184,19 @@ class Driver(Node):
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
+    def _remove_workpiece_cb(
+        self,
+        request: Trigger.Request,
+        response: Trigger.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Remove workpiece manually")
+        response.success = gripper["driver"].remove_workpiece(
+            scheduler=self.scheduler if self.needs_synchronize(gripper) else None,
+        )
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
     def _read_gripper_parameter_cb(
         self,
         request: ReadGripperParameter.Request,
@@ -1241,6 +1262,7 @@ class Driver(Node):
             response.success = gripper["driver"].write_module_parameter(
                 param=request.parameter, data=bytes_data
             )
+
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 

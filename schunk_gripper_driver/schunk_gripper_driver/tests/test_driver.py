@@ -772,11 +772,17 @@ def test_driver_offers_callback_for_locating_grippers(ros2: None):
 
 
 @skip_without_gripper
-def test_driver_offers_callback_for_stop(ros2: None):
+def test_driver_offers_callback_for_remove_workpiece(ros2: None):
     driver = Driver("driver")
     driver.on_configure(state=None)
     driver.on_activate(state=None)
+    driver.on_deactivate(state=None)
+    driver.on_cleanup(state=None)
 
+
+@skip_without_gripper
+def test_driver_offers_callback_for_stop(ros2: None):
+    driver = Driver("driver")
     req = Stop.Request()
     res = Stop.Response()
     for idx, _ in enumerate(driver.grippers):
