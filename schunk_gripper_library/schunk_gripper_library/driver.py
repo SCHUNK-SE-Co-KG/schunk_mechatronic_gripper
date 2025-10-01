@@ -5,7 +5,7 @@ from pymodbus.pdu import ModbusPDU
 import re
 from threading import Thread, Event
 import time
-from httpx import Client, ConnectError, ConnectTimeout, ReadTimeout
+from httpx import Client, ConnectError, ConnectTimeout, ReadTimeout, HTTPError
 from importlib.resources import files
 from typing import Union
 import json
@@ -156,6 +156,9 @@ class Driver(object):
                         f"http://{host}:{port}/adi/data.json"
                     ).is_success
                 except (ConnectError, ConnectTimeout):
+                    self.connected = False
+                except HTTPError as e:
+                    print(f"{type(e)}: {e}")
                     self.connected = False
 
         # Modbus

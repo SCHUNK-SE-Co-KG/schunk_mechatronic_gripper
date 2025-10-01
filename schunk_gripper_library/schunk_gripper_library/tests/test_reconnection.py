@@ -67,6 +67,14 @@ def test_driver_handles_httpx_exceptions_on_startup(simulate_httpx_failure):
     assert not driver.connect(host="0.0.0.0", port=8000)
     driver.disconnect()
 
+    # Check httpx.HTTPError
+    simulate_httpx_failure["exception"] = httpx.HTTPError(
+        "Something weird we didn't anticipate"
+    )
+    driver = Driver()
+    assert not driver.connect(host="0.0.0.0", port=8000)
+    driver.disconnect()
+
 
 @skip_without_gripper
 def test_driver_handles_httpx_exceptions_during_polling(simulate_httpx_failure):
