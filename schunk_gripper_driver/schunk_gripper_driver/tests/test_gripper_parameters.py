@@ -26,17 +26,27 @@ from pathlib import Path
 import json
 from unittest.mock import patch
 
-# Setup a module-wide grippers configuration
+# Setup a module-wide grippers configuration in the first test
 # and let the driver automatically start into the _active_ state
 headless = True
-location = Path("/var/tmp/schunk_gripper")
-location.mkdir(parents=True, exist_ok=True)
-config = [
-    {"gripper_id": "gripper_1", "host": "0.0.0.0", "port": 8000},
-    {"gripper_id": "gripper_2", "serial_port": "/dev/ttyUSB0", "device_id": 12},
-]
-with open(location.joinpath("configuration.json"), "w") as f:
-    json.dump(config, f, indent=2)
+
+
+def test_setup_gripper_configuration_for_succeeding_tests():
+    location = Path("/var/tmp/schunk_gripper")
+    location.mkdir(parents=True, exist_ok=True)
+    config_file = location.joinpath("configuration.json")
+    config = [
+        {"gripper_id": "gripper_1", "host": "0.0.0.0", "port": 8000},
+        {"gripper_id": "gripper_2", "serial_port": "/dev/ttyUSB0", "device_id": 12},
+    ]
+    with open(config_file, "w") as f:
+        json.dump(config, f, indent=2)
+
+    with open(config_file, "r") as f:
+        try:
+            assert json.load(f) == config
+        except json.JSONDecodeError:
+            assert False
 
 
 def test_driver_implements_callback_for_reading_gripper_parameters(ros2):
