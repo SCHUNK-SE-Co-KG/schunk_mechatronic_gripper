@@ -1,0 +1,14 @@
+string parameter  # Module parameter in hex, e.g. "0x0528"
+
+# Make sure to fill the correct array with your value(s).
+bool[]    value_bool
+uint8[]   value_uint8
+uint16[]  value_uint16
+uint32[]  value_uint32
+int32[]   value_int32
+float32[] value_float
+string[]  value_char
+uint8[]   value_enum
+---
+bool success
+string message

@@ -31,6 +31,8 @@ import os
 from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType
 from typing_extensions import Any
 import importlib
+from pathlib import Path
+import json
 
 
 def get_directory_size(directory):
@@ -245,3 +247,22 @@ class LogHelper:
 
         rclpy.spin_until_future_complete(client, future)
         return future.result().results[0].successful
+
+
+@pytest.fixture(scope="module")
+def config_file():
+    location = Path("/var/tmp/schunk_gripper")
+    location.mkdir(parents=True, exist_ok=True)
+    config_file = location.joinpath("configuration.json")
+    config = [
+        {"gripper_id": "gripper_1", "host": "0.0.0.0", "port": 8000},
+        {"gripper_id": "gripper_2", "serial_port": "/dev/ttyUSB0", "device_id": 12},
+    ]
+    with open(config_file, "w") as f:
+        json.dump(config, f, indent=2)
+
+    with open(config_file, "r") as f:
+        try:
+            assert json.load(f) == config
+        except json.JSONDecodeError:
+            assert False

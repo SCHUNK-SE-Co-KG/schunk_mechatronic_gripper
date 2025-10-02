@@ -42,6 +42,8 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     ShowGripperSpecification,
     ScanGrippers,
     LocateGripper,
+    ReadGripperParameter,
+    WriteGripperParameter,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -65,6 +67,7 @@ import json
 from collections import OrderedDict
 import time
 from typing import Any
+import re
 
 
 class Gripper(TypedDict):
@@ -567,6 +570,22 @@ class Driver(Node):
                     Trigger,
                     f"~/{gripper_id}/brake_test",
                     partial(self._brake_test_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+            self.gripper_services.append(
+                self.create_service(
+                    ReadGripperParameter,
+                    f"~/{gripper_id}/read_parameter",
+                    partial(self._read_gripper_parameter_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+            self.gripper_services.append(
+                self.create_service(
+                    WriteGripperParameter,
+                    f"~/{gripper_id}/write_parameter",
+                    partial(self._write_gripper_parameter_cb, gripper=gripper),
                     callback_group=self.gripper_services_cb_group,
                 )
             )
@@ -1073,6 +1092,74 @@ class Driver(Node):
         response.success = gripper["driver"].brake_test(
             scheduler=self.scheduler if self.needs_synchronize(gripper) else None,
         )
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _read_gripper_parameter_cb(
+        self,
+        request: ReadGripperParameter.Request,
+        response: ReadGripperParameter.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Read gripper parameter")
+
+        if self.needs_synchronize(gripper):
+            data = self.scheduler.execute(
+                func=partial(
+                    gripper["driver"].read_module_parameter, param=request.parameter
+                )
+            ).result()
+        else:
+            data = gripper["driver"].read_module_parameter(request.parameter)
+
+        values, value_type = gripper["driver"].decode_module_parameter(
+            data=data, param=request.parameter
+        )
+
+        # Find the corresponding message field for this type
+        # and assign the values to it if existent.
+        msg_field = f"value_{re.split(r'[^a-z0-9]', value_type)[0]}"
+        if getattr(response, msg_field, None) is not None:
+            setattr(response, msg_field, values)
+            response.success = True
+        else:
+            response.success = False
+
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _write_gripper_parameter_cb(
+        self,
+        request: WriteGripperParameter.Request,
+        response: WriteGripperParameter.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Write gripper parameter")
+
+        # Find the first non-empty array
+        data: list[Any] = []
+        for elem in dir(request):
+            if elem.startswith("value_"):
+                data = getattr(request, elem, [])
+                if data:
+                    break
+
+        bytes_data = gripper["driver"].encode_module_parameter(
+            data=data, param=request.parameter
+        )
+
+        if self.needs_synchronize(gripper):
+            response.success = self.scheduler.execute(
+                func=partial(
+                    gripper["driver"].write_module_parameter,
+                    param=request.parameter,
+                    data=bytes_data,
+                )
+            ).result()
+        else:
+            response.success = gripper["driver"].write_module_parameter(
+                param=request.parameter, data=bytes_data
+            )
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 

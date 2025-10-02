@@ -135,7 +135,7 @@ def test_driver_rejects_loading_incorrectly_formatted_configuration(ros2):
         assert len(driver.grippers) == 0
 
 
-def test_driver_overwrites_grippers_when_loading_configuration():
+def test_driver_overwrites_grippers_when_loading_configuration(ros2):
     driver = Driver("driver")
     driver.get_logger().set_level(10)  # Debug
 
@@ -171,7 +171,7 @@ def test_driver_overwrites_grippers_when_loading_configuration():
         assert driver.grippers[0][key] == value
 
 
-def test_driver_keeps_current_grippers_when_loading_invalid_configuration():
+def test_driver_keeps_current_grippers_when_loading_invalid_configuration(ros2):
     driver = Driver("driver")
 
     # Store two identical grippers to obtain an invalid configuration file

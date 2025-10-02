@@ -14,6 +14,7 @@ from functools import partial
 from pymodbus.logging import Log
 import serial  # type: ignore [import-untyped]
 from pymodbus.exceptions import ModbusIOException
+from typing import Any, Type, cast
 
 
 class NonExclusiveSerialClient(ModbusSerialClient):
@@ -727,6 +728,8 @@ class Driver(object):
                 except (ReadTimeout, ConnectError, ConnectTimeout):
                     return result
             if response.is_success:
+                if response.json() == []:
+                    return result
                 result = bytearray(bytes.fromhex(response.json()[0]))
 
         if result:
@@ -770,6 +773,95 @@ class Driver(object):
             return response.is_success
 
         return False
+
+    def encode_module_parameter(self, data: list[Any], param: str) -> bytearray:
+        result = bytearray()
+        if not self.connected:
+            return result
+        if not data or param not in self.writable_parameters:
+            return result
+
+        type_str = str(self.writable_parameters[param]["type"])
+        expected_size = int(self.writable_parameters[param]["registers"]) * 2
+        endianness = ">" if self.fieldbus == "PN" else "<"
+        encodings = {
+            "bool": {"char": "?", "type": bool},
+            "uint8": {"char": "B", "type": int},
+            "uint16": {"char": "H", "type": int},
+            "uint32": {"char": "I", "type": int},
+            "float": {"char": "f", "type": float},
+        }
+        if type_str not in encodings:
+            return result
+        char = encodings[type_str]["char"]
+        expected_type = cast(Type, encodings[type_str]["type"])
+
+        for entry in data:
+            if not isinstance(entry, expected_type):
+                return result
+            result.extend(struct.pack(f"{endianness}{char}", entry))
+
+        while len(result) < expected_size:
+            result.extend(bytes.fromhex("00"))
+
+        return result
+
+    def decode_module_parameter(
+        self, data: bytearray, param: str
+    ) -> tuple[tuple[Any, ...], str]:
+        error: tuple[tuple[Any, ...], str] = (tuple(), "")
+        if not self.connected:
+            return error
+        if not data:
+            return error
+        if param not in self.readable_parameters:
+            return error
+
+        value_type = str(self.readable_parameters[param]["type"])
+
+        if value_type == "enum":
+            values = struct.unpack("h", data)
+
+        elif value_type == "bool":
+            values = struct.unpack("?", data[:1])
+
+        elif value_type.startswith("char"):
+            count = len(data)
+            values = struct.unpack(f"{count}B", data)
+            values = ("".join([chr(i) for i in values]).strip(),)
+
+        elif value_type.startswith("uint8"):
+            count = len(data)
+            values = struct.unpack(f"{count}B", data)
+
+        elif value_type.startswith("float"):
+            count = len(data) // 4
+            if self.fieldbus == "PN":
+                values = struct.unpack(f"{count}f", data[::-1])
+                values = values[::-1]
+            else:
+                values = struct.unpack(f"{count}f", data)
+
+        elif value_type.startswith("uint16"):
+            count = len(data) // 2
+            if self.fieldbus == "PN":
+                values = struct.unpack(f"{count}H", data[::-1])
+                values = values[::-1]
+            else:
+                values = struct.unpack(f"{count}H", data)
+
+        elif value_type.startswith("uint32"):
+            count = len(data) // 4
+            if self.fieldbus == "PN":
+                values = struct.unpack(f"{count}I", data[::-1])
+                values = values[::-1]
+            else:
+                values = struct.unpack(f"{count}I", data)
+
+        else:
+            return error
+
+        return (values, value_type)
 
     def wait_for_status(
         self, bits: dict[str, int] = {}, timeout_sec: float = 1.0
