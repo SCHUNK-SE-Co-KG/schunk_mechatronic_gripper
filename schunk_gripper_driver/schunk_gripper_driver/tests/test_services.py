@@ -785,7 +785,18 @@ def test_driver_implements_locating_gripper(driver):
     client = node.create_client(LocateGripper, "/schunk/driver/locate_gripper")
     assert client.wait_for_service(timeout_sec=2)
 
+    # TCP/IP
     req = LocateGripper.Request()
+    req.gripper.host = "0.0.0.0"
+    req.gripper.port = 8000
+    future = client.call_async(req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    # Modbus
+    req = LocateGripper.Request()
+    req.gripper.serial_port = "/dev/ttyUSB0"
+    req.gripper.device_id = 12
     future = client.call_async(req)
     rclpy.spin_until_future_complete(node, future)
     assert future.result().success
