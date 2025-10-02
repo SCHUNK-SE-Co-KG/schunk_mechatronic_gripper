@@ -389,12 +389,14 @@ class Driver(Node):
         # Try to connect each gripper
         for idx, gripper in enumerate(self.grippers):
             driver = GripperDriver()
+            scheduler = self.scheduler if gripper["serial_port"] else None
             driver.connect(
                 host=gripper["host"],
                 port=gripper["port"],
                 serial_port=gripper["serial_port"],
                 device_id=gripper["device_id"],
                 update_cycle=None,
+                scheduler=scheduler,
             )
             self.grippers[idx]["driver"] = driver
 
