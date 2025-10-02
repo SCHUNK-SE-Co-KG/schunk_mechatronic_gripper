@@ -402,7 +402,7 @@ def test_driver_runs_a_scheduler_for_concurrent_tasks(ros2: None):
     def scheduler_running() -> bool:
         return driver.scheduler.worker_thread.is_alive()
 
-    assert not scheduler_running()
+    assert scheduler_running()
     driver.on_configure(state=None)
     assert scheduler_running()
     driver.on_activate(state=None)
@@ -410,6 +410,8 @@ def test_driver_runs_a_scheduler_for_concurrent_tasks(ros2: None):
     driver.on_deactivate(state=None)
     assert scheduler_running()
     driver.on_cleanup(state=None)
+    assert scheduler_running()
+    driver.on_shutdown(state=None)
     assert not scheduler_running()
 
 

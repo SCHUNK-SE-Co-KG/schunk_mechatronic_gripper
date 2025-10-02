@@ -132,6 +132,7 @@ class Driver(object):
         serial_port: str = "/dev/ttyUSB0",
         device_id: int | None = None,
         update_cycle: float | None = 0.05,
+        scheduler: Scheduler | None = None,
     ) -> bool:
         if isinstance(update_cycle, float) and update_cycle < 0.001:
             return False
@@ -184,11 +185,16 @@ class Driver(object):
                 self.connected = self.mb_client.connect()
 
         if self.connected:
-            if not self.update_module_parameters():
+            updated = (
+                scheduler.execute(func=partial(self.update_module_parameters)).result()
+                if scheduler
+                else self.update_module_parameters()
+            )
+            if not updated:
                 return False
             if update_cycle:
                 self.update_cycle = update_cycle
-                self.start_module_updates()
+                self.start_module_updates(scheduler=scheduler)
 
         return self.connected
 

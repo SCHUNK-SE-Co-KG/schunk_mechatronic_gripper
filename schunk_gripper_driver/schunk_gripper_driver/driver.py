@@ -123,6 +123,7 @@ class Driver(Node):
         self.declare_parameter("log_level", "INFO")
 
         self.scheduler: Scheduler = Scheduler()
+        self.scheduler.start()
         self.gripper_services: list[Service] = []
         self.joint_state_publishers: dict[str, Publisher] = {}
         self.gripper_state_publishers: dict[str, Publisher] = {}
@@ -341,12 +342,14 @@ class Driver(Node):
 
         driver = GripperDriver()
         if not gripper_id:
+            scheduler = self.scheduler if serial_port else None
             if not driver.connect(
                 host=host,
                 port=port,
                 serial_port=serial_port,
                 device_id=device_id,
                 update_cycle=None,
+                scheduler=scheduler,
             ):
                 return False
             gripper_id = self.get_unique_id(driver.gripper_type)
@@ -382,17 +385,18 @@ class Driver(Node):
         self.get_logger().debug("on_configure() is called.")
         if not self.grippers:
             return TransitionCallbackReturn.FAILURE
-        self.scheduler.start()
 
         # Try to connect each gripper
         for idx, gripper in enumerate(self.grippers):
             driver = GripperDriver()
+            scheduler = self.scheduler if gripper["serial_port"] else None
             driver.connect(
                 host=gripper["host"],
                 port=gripper["port"],
                 serial_port=gripper["serial_port"],
                 device_id=gripper["device_id"],
                 update_cycle=None,
+                scheduler=scheduler,
             )
             self.grippers[idx]["driver"] = driver
 
@@ -649,8 +653,6 @@ class Driver(Node):
             gripper["driver"].disconnect()
             gripper["driver"] = GripperDriver()
 
-        self.scheduler.stop()
-
         # Release info services
         if not self.destroy_service(self.list_grippers_srv):
             return TransitionCallbackReturn.FAILURE
@@ -685,6 +687,7 @@ class Driver(Node):
 
     def on_shutdown(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().debug("on_shutdown() is called.")
+        self.scheduler.stop()
         self.connection_status_stop.set()
         self.connection_status_thread.join()
 
@@ -943,15 +946,17 @@ class Driver(Node):
     ):
         self.get_logger().debug("---> Locate gripper")
         driver = GripperDriver()
+        scheduler = self.scheduler if request.gripper.serial_port else None
         driver.connect(
             host=request.gripper.host,
             port=request.gripper.port,
             serial_port=request.gripper.serial_port,
             device_id=request.gripper.device_id,
             update_cycle=None,
+            scheduler=scheduler,
         )
-        driver.acknowledge()
-        response.success = driver.twitch_jaws()
+        driver.acknowledge(scheduler=scheduler)
+        response.success = driver.twitch_jaws(scheduler=scheduler)
         driver.disconnect()
         return response
 
