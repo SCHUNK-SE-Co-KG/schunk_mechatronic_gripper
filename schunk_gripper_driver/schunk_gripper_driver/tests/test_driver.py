@@ -27,6 +27,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     StartJoggingGPE,
     ShowGripperSpecification,
     LocateGripper,
+    Stop,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -767,3 +768,23 @@ def test_driver_offers_callback_for_locating_grippers(ros2: None):
     req.gripper.port = 1234
     result = driver._locate_gripper_cb(request=req, response=res)
     assert not result.success
+
+
+@skip_without_gripper
+def test_driver_offers_callback_for_stop(ros2: None):
+    driver = Driver("driver")
+    driver.on_configure(state=None)
+    driver.on_activate(state=None)
+
+    req = Stop.Request()
+    res = Stop.Response()
+    for idx, _ in enumerate(driver.grippers):
+        gripper = driver.grippers[idx]
+        gripper_id = gripper["gripper_id"]
+        assert driver._stop_cb(
+            request=req, response=res, gripper=gripper
+        ), f"gripper_id: {gripper_id}"
+        assert res.success
+
+    driver.on_deactivate(state=None)
+    driver.on_cleanup(state=None)

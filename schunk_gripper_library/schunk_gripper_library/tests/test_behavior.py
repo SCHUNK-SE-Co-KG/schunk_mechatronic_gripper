@@ -1,6 +1,5 @@
 from schunk_gripper_library.driver import Driver
 from schunk_gripper_library.utility import skip_without_gripper, Scheduler
-import pytest
 import time
 
 
@@ -222,7 +221,6 @@ def test_move_to_relative_position_fails_with_invalid_arguments():
         driver.disconnect()
 
 
-@pytest.mark.skip
 @skip_without_gripper
 def test_stop():
     driver = Driver()
@@ -238,7 +236,8 @@ def test_stop():
         )
         assert driver.acknowledge()
 
-        assert driver.stop()
+        assert driver.stop(use_gpe=False)
+        assert driver.stop(use_gpe=True)
         assert driver.disconnect()
 
 
