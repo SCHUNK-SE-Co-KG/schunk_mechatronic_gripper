@@ -241,6 +241,25 @@ def test_stop():
         assert driver.disconnect()
 
 
+@skip_without_gripper
+def test_prepare_for_shutdown():
+    driver = Driver()
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        # Not connected
+        assert not driver.prepare_for_shutdown()
+
+        # after connection
+        assert driver.connect(
+            host=host, port=port, serial_port=serial_port, device_id=12
+        )
+        assert driver.acknowledge()
+
+        assert driver.prepare_for_shutdown()
+        assert driver.disconnect()
+
+
 def test_release_fails_when_not_connected():
     driver = Driver()
     assert not driver.release()
