@@ -197,7 +197,7 @@ class EthernetScanner(object):
         """Scans all available ethernet interfaces in parallel for connected grippers.
 
         Returns:
-            list[dict]: A list of dicts with keys 'host' and 'port'
+            list[dict]: A list of dicts with 'host'->'port' mapping
         """
         with self.lock:
             if not self.is_ready:
@@ -226,7 +226,7 @@ class EthernetScanner(object):
         Args:
             iface (str): The name of the interface to scan.
         Returns:
-            list[dict]: A list of dicts with keys 'host' and 'port'
+            list[dict]: A list of dicts with 'host'->'port' mapping
         """
         result: list[dict] = []
 
