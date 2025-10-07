@@ -2,15 +2,16 @@ from threading import Thread
 from queue import PriorityQueue
 from concurrent.futures import Future
 from functools import partial
+import threading
 import time
 from pathlib import Path
 from httpx import Client, ConnectTimeout, ConnectError
 import pytest
 import os
 import termios
-from socket import socket as Socket
 import socket
 import netifaces
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def supports_parity(serial_port: str) -> bool:
@@ -134,69 +135,135 @@ class Scheduler(object):
 
 
 class EthernetScanner(object):
+    """
+    A network scanner for detecting grippers on all available Ethernet interfaces.
+
+    This class uses UDP broadcast messages to discover grippers
+    on the local network. All interfaces are scanned in parallel.
+    This class is supposed to be used as a context manager to ensure sockets are
+    properly initialized and closed.
+
+    Usage:
+        with EthernetScanner() as scanner:
+            grippers = scanner.scan() # list of dicts with 'host'<->'port' mapping
+    """
+
     def __init__(self) -> None:
         self.is_ready: bool = False
         self.discovery_port: int = 3250  # HMS standard
         self.webserver_port: int = 80
-        self._reset_socket()
-
-    def scan(self) -> list[dict]:
-        result: list[dict] = []
-        if not self.is_ready:
-            return result
-        interfaces = netifaces.interfaces()
-        interfaces = list(filter(lambda iface: iface.startswith("eth"), interfaces))
-        AF_INET = netifaces.InterfaceType.AF_INET
-        AF_PACKET = netifaces.InterfaceType.AF_PACKET
-
-        for iface in interfaces:
-            addresses = netifaces.ifaddresses(iface)
-
-            if AF_INET in addresses and AF_PACKET in addresses:
-                broadcast_ip = addresses[AF_INET][0].get("broadcast", "255.255.255.255")
-                mac_addr = addresses[AF_PACKET][0]["addr"].replace(":", "")
-                message = (
-                    bytes.fromhex("c1ab")
-                    + bytes.fromhex("ff" * 6)
-                    + bytes.fromhex(mac_addr)
-                    + bytes.fromhex("00" * 4)
-                )
-                try:
-                    self.socket.sendto(message, (broadcast_ip, self.discovery_port))
-                    try:
-                        while True:
-                            response, addr = self.socket.recvfrom(1024)
-                            if response == message:  # it's me
-                                continue
-                            result.append(
-                                {"host": addr[0], "port": self.webserver_port}
-                            )
-                    except socket.timeout:
-                        pass
-                except Exception as e:
-                    print(f"Error on {iface}: {e}")
-
-        return result
+        self.socket_timeout: float = 1.0  # in seconds
+        self.sockets: dict[str, socket.socket] = {}  # one socket per interface
+        self.interfaces: list[str] = []
+        self.lock = threading.Lock()
 
     def __enter__(self) -> "EthernetScanner":
-        if self.socket.fileno() == -1:  # already closed once
-            self._reset_socket()
-        self.socket.bind(("", self.discovery_port))  # listen on all local interfaces
-        self.is_ready = True
+        with self.lock:
+            self.sockets = {}
+            all_interfaces = netifaces.interfaces()
+            AF_INET = netifaces.InterfaceType.AF_INET
+            AF_PACKET = netifaces.InterfaceType.AF_PACKET
+
+            for iface in all_interfaces:
+                addr = netifaces.ifaddresses(iface)
+                if AF_INET not in addr or AF_PACKET not in addr:
+                    continue
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.settimeout(self.socket_timeout)
+                # Bind to the specific interface's IP address to avoid conflicts
+                iface_ip = addr[AF_INET][0]["addr"]
+                sock.bind((iface_ip, self.discovery_port))
+                self.sockets[iface] = sock
+                self.interfaces.append(iface)
+
+            self.is_ready = True
+
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
-        try:
-            self.socket.shutdown(socket.SHUT_RDWR)
-        except OSError:
-            pass
-        self.socket.close()
+        with self.lock:
+            for sock in self.sockets.values():
+                try:
+                    sock.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                sock.close()
+            self.sockets.clear()
+            self.is_ready = False
 
-    def _reset_socket(self) -> None:
-        self.socket: Socket = Socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.socket.settimeout(1.0)
+    def scan(self) -> list[dict]:
+        """Scans all available ethernet interfaces in parallel for connected grippers.
+
+        Returns:
+            list[dict]: A list of dicts with keys 'host' and 'port'
+        """
+        with self.lock:
+            if not self.is_ready:
+                raise RuntimeError("EthernetScanner must be used as a context manager.")
+
+            result: list[dict] = []
+            max_workers = min(len(self.interfaces), 10)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(self._scan_interface, iface): iface
+                    for iface in self.interfaces
+                }
+                for future in as_completed(futures.keys()):
+                    try:
+                        result.extend(future.result())
+                    except Exception as e:
+                        raise RuntimeError(
+                            f"Error scanning interface {futures[future]}: {e}"
+                        ) from e
+
+            return result
+
+    def _scan_interface(self, iface: str) -> list[dict]:
+        """Scans a single interface using its dedicated socket.
+
+        Args:
+            iface (str): The name of the interface to scan.
+        Returns:
+            list[dict]: A list of dicts with keys 'host' and 'port'
+        """
+        result: list[dict] = []
+
+        if not self.is_ready or iface not in self.sockets:
+            raise RuntimeError("EthernetScanner must be used as a context manager.")
+
+        if iface not in netifaces.interfaces():
+            raise ValueError(f"Unknown interface: {iface}.")
+
+        addresses = netifaces.ifaddresses(iface)
+        AF_INET = netifaces.InterfaceType.AF_INET
+        AF_PACKET = netifaces.InterfaceType.AF_PACKET
+        if AF_INET not in addresses or AF_PACKET not in addresses:
+            return result
+
+        broadcast_ip = addresses[AF_INET][0].get("broadcast", "255.255.255.255")
+        mac_addr = addresses[AF_PACKET][0]["addr"].replace(":", "")
+        message = (
+            bytes.fromhex("c1ab")
+            + bytes.fromhex("ff" * 6)
+            + bytes.fromhex(mac_addr)
+            + bytes.fromhex("00" * 4)
+        )
+
+        sock = self.sockets[iface]
+
+        sock.sendto(message, (broadcast_ip, self.discovery_port))
+        while True:
+            try:
+                response, addr = sock.recvfrom(1024)
+                if response == message:  # ignore our own message
+                    continue
+                result.append({"host": addr[0], "port": self.webserver_port})
+            except socket.timeout:
+                break
+
+        return result
 
 
 def gripper_available() -> bool:
