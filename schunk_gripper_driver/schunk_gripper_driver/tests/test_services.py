@@ -60,6 +60,7 @@ def test_driver_advertises_state_depending_services(lifecycle_interface):
         "brake_test",
         "read_parameter",
         "write_parameter",
+        "prepare_for_shutdown",
     ]
     until_change_takes_effect = 0.1
 
@@ -259,6 +260,55 @@ def test_driver_implements_fast_stop(lifecycle_interface):
 
     driver.change_state(Transition.TRANSITION_DEACTIVATE)
     driver.change_state(Transition.TRANSITION_CLEANUP)
+
+
+@skip_without_gripper
+def test_driver_implements_prepare_for_shutdown(lifecycle_interface):
+    driver = lifecycle_interface
+
+    node = Node("check_prepare_for_shutdown_service")
+    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
+    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
+    assert add_client.wait_for_service(timeout_sec=2)
+    assert reset_client.wait_for_service(timeout_sec=2)
+
+    # Reset grippers
+    reset_req = Trigger.Request()
+    future = reset_client.call_async(reset_req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    # Add TCP/IP gripper
+    add_req = AddGripper.Request()
+    add_req.gripper.host = "0.0.0.0"
+    add_req.gripper.port = 8000
+    future = add_client.call_async(add_req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    for gripper in driver.list_grippers():
+        service_name = f"/schunk/driver/{gripper}/prepare_for_shutdown"
+        ServiceType = driver.get_service_type(service_name)
+        assert (
+            ServiceType is not None
+        ), f"{gripper}: prepare_for_shutdown service not found"
+
+        pfs_client = node.create_client(ServiceType, service_name)
+        assert pfs_client.wait_for_service(
+            timeout_sec=5
+        ), f"{gripper}: prepare_for_shutdown service unavailable"
+
+        pfs_req = ServiceType.Request()
+        future = pfs_client.call_async(pfs_req)
+        rclpy.spin_until_future_complete(node, future)
+        assert future.result().success, f"{gripper}: {future.result().message}"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+    node.destroy_node()
 
 
 @skip_without_gripper
