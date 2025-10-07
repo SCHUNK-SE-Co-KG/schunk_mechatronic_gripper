@@ -230,11 +230,11 @@ class EthernetScanner(object):
         """
         result: list[dict] = []
 
-        if not self.is_ready or iface not in self.sockets:
+        if not self.is_ready:
             raise RuntimeError("EthernetScanner must be used as a context manager.")
 
-        if iface not in netifaces.interfaces():
-            raise ValueError(f"Unknown interface: {iface}.")
+        if iface not in self.sockets:
+            raise ValueError(f"Unsupported interface: {iface}.")
 
         addresses = netifaces.ifaddresses(iface)
         AF_INET = netifaces.InterfaceType.AF_INET
