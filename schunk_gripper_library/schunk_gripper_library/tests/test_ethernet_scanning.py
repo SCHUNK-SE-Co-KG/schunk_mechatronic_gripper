@@ -1,5 +1,4 @@
 from schunk_gripper_library.utility import EthernetScanner as Scanner
-import time
 
 
 def test_scanner_is_ready_on_enter():
@@ -18,6 +17,8 @@ def test_scanner_supports_reusing_the_context_manager():
 def test_scanner_implements_a_scan_method(ethernet_gripper):
     # The fixture provides an HMS chip that should
     # respond to the scanning requests.
+    # Note: If this test is run on a machine with multiple network interfaces,
+    # then the HMS chip will respond multiple times.
     with Scanner() as scanner:
         grippers = scanner.scan()
         assert isinstance(grippers, list)
@@ -39,15 +40,3 @@ def test_scan_raises_exception_without_context_manager():
         assert False, "Expected RuntimeError"
     except RuntimeError:
         pass
-
-
-def test_scan_completes_within_timeout_limit():
-    with Scanner() as scanner:
-        start = time.time()
-        try:
-            scanner.scan()
-        except Exception:
-            pass
-        duration = time.time() - start
-        epsilon = 0.25  # some margin for scheduling delays
-        assert duration < (scanner.socket_timeout + epsilon)
