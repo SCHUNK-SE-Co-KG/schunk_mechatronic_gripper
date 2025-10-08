@@ -46,6 +46,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     WriteGripperParameter,
     Stop,
     StopWithGPE,
+    PrepareForShutdown,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -607,6 +608,15 @@ class Driver(Node):
                 )
             )
 
+            self.gripper_services.append(
+                self.create_service(
+                    srv_type=PrepareForShutdown,
+                    srv_name=f"~/{gripper_id}/prepare_for_shutdown",
+                    callback=partial(self._prepare_for_shutdown_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+
         # Publishers for each gripper
         for idx, _ in enumerate(self.grippers):
             gripper = self.grippers[idx]
@@ -1014,6 +1024,22 @@ class Driver(Node):
             response.success = gripper["driver"].fast_stop(scheduler=self.scheduler)
         else:
             response.success = gripper["driver"].fast_stop()
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _prepare_for_shutdown_cb(
+        self,
+        request: PrepareForShutdown.Request,
+        response: PrepareForShutdown.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Prepare for shutdown")
+        if self.needs_synchronize(gripper):
+            response.success = gripper["driver"].prepare_for_shutdown(
+                scheduler=self.scheduler
+            )
+        else:
+            response.success = gripper["driver"].prepare_for_shutdown()
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 

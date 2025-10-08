@@ -37,6 +37,7 @@ rosidl_generate_interfaces(
     srv/Stop.srv
     srv/StopWithGPE.srv
     srv/WriteGripperParameter.srv
+    srv/PrepareForShutdown.srv
     msg/ConnectionState.msg
     msg/Gripper.msg
     msg/GripperState.msg
