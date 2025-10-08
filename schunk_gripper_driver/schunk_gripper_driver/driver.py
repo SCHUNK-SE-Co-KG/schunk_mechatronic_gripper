@@ -469,6 +469,14 @@ class Driver(Node):
                     callback_group=self.gripper_services_cb_group,
                 )
             )
+
+            # Set module type if gripper is not connected. This is important to determine if the gripper has a brake. If not set, service types will be wrong. 
+            if not gripper["driver"].connected: 
+                gripperProperties = gripper_id.split("_")
+                #Check if the gripper ID is in the expected format
+                if len(gripperProperties) >= 5: 
+                    gripper["driver"].module_type = "_".join([gripperProperties[0], gripperProperties[1], gripperProperties[3], gripperProperties[4]])
+
             if gripper["driver"].gpe_available():
                 service_types = [MoveToAbsolutePositionGPE, MoveToRelativePositionGPE]
             else:
