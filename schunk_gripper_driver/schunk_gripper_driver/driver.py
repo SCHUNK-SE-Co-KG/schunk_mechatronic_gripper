@@ -1092,15 +1092,15 @@ class Driver(Node):
         self.get_logger().debug("---> Grip")
         use_gpe = getattr(request, "use_gpe", False)
         scheduler = self.scheduler if self.needs_synchronize(gripper) else None
-        at_position = getattr(request, "at_position", None)
+        position = getattr(request, "position", None)
         velocity = getattr(request, "velocity", None)
-        if at_position is not None:
-            at_position = int(at_position * 1e6)
+        if position is not None:
+            position = int(position * 1e6)
         if velocity is not None:
             velocity = int(velocity * 1e6)
 
         response.success = gripper["driver"].grip(
-            position=at_position,
+            position=position,
             velocity=velocity,
             force=request.force,
             use_gpe=use_gpe,

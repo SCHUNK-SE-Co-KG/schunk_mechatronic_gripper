@@ -1,11 +1,17 @@
-int8 force    # Percentage points of the gripper's max. gripping force.
-              # Tolerated values in [50, 100]
+int16 force   # Grip force in percent
+              # Depends on the gripper type and if the gripper
+              # has a brake
+              # For grippers of type EGU/EGK/EZU without brake:
+              # 50 ≤ gripping force [%] ≤ 100
+              # For grippers of type EGU/EZU with brake: 
+              # EGU 50, 60, 80, EZU 30, 35, 40: 50 ≤ gripping force [%] ≤ 200
+              # EGU 70: 50 ≤ gripping force [%] ≤ 150
 
-bool outward  # Whether to open the gripper for grasping.
+bool outward  # Whether to grip the Workpiece from the inside.
               # Defaults to False.
 
 float32 velocity # Speed for the gripping motion in [m/s].
-                 # Defaults to 0.
+                 # If set to 0, the speed corresponds to the grip force
 ---
 bool success
 string message
