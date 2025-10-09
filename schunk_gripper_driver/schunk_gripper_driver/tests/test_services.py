@@ -556,7 +556,7 @@ def test_driver_implements_grip_at_position(lifecycle_interface):
             # Grip at position
             grip_req = GripServiceType.Request()
             grip_req.force = target["force"]
-            grip_req.at_position = target["position"]
+            grip_req.position = target["position"]
             grip_req.outward = target["outward"]
             if hasattr(grip_req, "use_gpe"):
                 grip_req.use_gpe = target["use_gpe"]
@@ -703,7 +703,7 @@ def test_driver_implements_grip_at_position_with_velocity(lifecycle_interface):
             request = ServiceType.Request()
             request.force = target["force"]
             request.velocity = target["velocity"]
-            request.at_position = target["position"]
+            request.position = target["position"]
             request.outward = target["outward"]
             if hasattr(request, "use_gpe"):
                 request.use_gpe = target["use_gpe"]
