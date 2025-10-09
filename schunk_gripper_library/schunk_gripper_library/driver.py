@@ -611,7 +611,12 @@ class Driver(object):
         def do() -> bool:
             self.clear_plc_output()
             self.send_plc_output()
-            return True
+            cmd_toggle_before = self.get_status_bit(bit=5)
+            self.set_control_bit(bit=8, value=False)  # stop negative jogging
+            self.set_control_bit(bit=9, value=False)  # stop positive jogging
+            self.send_plc_output()
+            desired_bits = {"5": cmd_toggle_before ^ 1, "6": 0}
+            return self.wait_for_status(bits=desired_bits)
 
         if scheduler:
             return scheduler.execute(func=partial(do)).result()

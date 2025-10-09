@@ -86,8 +86,10 @@ def test_all_gripper_commands_run_with_a_scheduler():
 
     # Jogging
     assert driver.acknowledge(scheduler=scheduler)
-    assert driver.start_jogging(velocity=driver.module_parameters["max_grp_vel"])
-    assert driver.stop_jogging()
+    assert driver.start_jogging(
+        velocity=driver.module_parameters["max_grp_vel"], scheduler=scheduler
+    )
+    assert driver.stop_jogging(scheduler=scheduler)
 
     # Twitching the jaws
     assert driver.acknowledge(scheduler=scheduler)
