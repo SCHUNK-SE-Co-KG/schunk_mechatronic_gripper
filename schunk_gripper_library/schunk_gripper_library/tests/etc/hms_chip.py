@@ -56,9 +56,14 @@ class HMSChip(object):
                 data, addr = self.sock.recvfrom(1024)
                 valid, mac_addr = self._valid(data)
                 if valid:
+                    # build response message
                     response = bytes.fromhex("c1ab")
                     response += bytes.fromhex(mac_addr)
                     response += self.response_payload
-                    self.sock.sendto(response, addr)
+
+                    # the real hms chip does not respond to the sender directly,
+                    # but broadcasts the response to the network on port 3250
+                    self.sock.sendto(response, ("255.255.255.255", self.port))
+
             except socket.timeout:
                 continue
