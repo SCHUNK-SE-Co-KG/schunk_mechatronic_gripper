@@ -11,10 +11,15 @@ int16 force   # Grip force in percent
 bool use_gpe  # Whether to activate grip force and position maintenance.
               # Defaults to False.
 
-bool outward  # Whether to grip the Workpiece from the inside.
+bool outward  # Whether to grip the workpiece from the inside
+              # (Fingers are moving outwards).
               # Defaults to False.
 
-float32 position  # Expect to grip a workpiece at a specific position in [m]
+float32 position  # Expect to grip a workpiece (wp) at a specific position in [m]
+                  # If an unexpected workpiece was gripped or
+                  # the gripping position was exceeded the command is terminated
+                  # and the gripper will either set bit 17 (wrong wp gripped) or
+                  # bit 11 (no wp gripped) in the statusword.
 ---
 bool success
 string message

@@ -7,7 +7,8 @@ int16 force   # Grip force in percent
               # EGU 50, 60, 80, EZU 30, 35, 40: 50 ≤ gripping force [%] ≤ 200
               # EGU 70: 50 ≤ gripping force [%] ≤ 150
 
-bool outward  # Whether to grip the Workpiece from the inside.
+bool outward  # Whether to grip the workpiece from the inside
+              # (Fingers are moving outwards).
               # Defaults to False.
 ---
 bool success
