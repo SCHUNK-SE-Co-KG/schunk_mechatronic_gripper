@@ -36,6 +36,7 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     GripAtPositionWithVelocity,
     GripAtPositionWithVelocityAndGPE,
     Release,
+    ReleaseWithGPE,
     StartJogging,
     StartJoggingGPE,
     ShowConfiguration,
@@ -553,9 +554,11 @@ class Driver(Node):
                 )
             self.gripper_services.append(
                 self.create_service(
-                    Release,
-                    f"~/{gripper_id}/release",
-                    partial(self._release_cb, gripper=gripper),
+                    srv_type=(
+                        ReleaseWithGPE if gripper["driver"].gpe_available() else Release
+                    ),
+                    srv_name=f"~/{gripper_id}/release",
+                    callback=partial(self._release_cb, gripper=gripper),
                     callback_group=self.gripper_services_cb_group,
                 )
             )
@@ -1112,19 +1115,20 @@ class Driver(Node):
 
     def _release_cb(
         self,
-        request: Release.Request,
-        response: Release.Response,
+        request: Release.Request | ReleaseWithGPE.Request,
+        response: Release.Response | ReleaseWithGPE.Response,
         gripper: Gripper,
     ):
         self.get_logger().debug("---> Release")
+        use_gpe = getattr(request, "use_gpe", False)
         if self.needs_synchronize(gripper):
             response.success = gripper["driver"].release(
-                use_gpe=request.use_gpe,
+                use_gpe=use_gpe,
                 scheduler=self.scheduler,
             )
         else:
             response.success = gripper["driver"].release(
-                use_gpe=request.use_gpe,
+                use_gpe=use_gpe,
             )
         response.message = gripper["driver"].get_status_diagnostics()
         return response
