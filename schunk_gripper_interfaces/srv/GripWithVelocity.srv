@@ -3,7 +3,7 @@ int16 force   # Grip force in percent
               # has a brake
               # For grippers of type EGU/EGK/EZU without brake:
               # 50 ≤ gripping force [%] ≤ 100
-              # For grippers of type EGU/EZU with brake: 
+              # For grippers of type EGU/EZU with brake:
               # EGU 50, 60, 80, EZU 30, 35, 40: 50 ≤ gripping force [%] ≤ 200
               # EGU 70: 50 ≤ gripping force [%] ≤ 150
 
