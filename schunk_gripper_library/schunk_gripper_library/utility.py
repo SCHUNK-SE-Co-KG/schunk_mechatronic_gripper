@@ -148,7 +148,7 @@ class EthernetScanner(object):
 
     Usage:
         with EthernetScanner() as scanner:
-            grippers = scanner.scan()  # list of dicts with 'host' and 'port'
+            grippers = scanner.scan()
     """
 
     def __init__(self) -> None:
@@ -279,7 +279,17 @@ class EthernetScanner(object):
             listener_thread.join()
             result.extend(responses)
 
-            return result
+            # If the system this scanner runs on has multiple network interfaces,
+            # then the same gripper might respond multiple times,
+            # so we filter duplicates out.
+            unique_hosts = set([entry["host"] for entry in result])
+            filtered_result: list[dict] = []
+            for entry in result:
+                if entry["host"] in unique_hosts:
+                    filtered_result.append(entry)
+                    unique_hosts.remove(entry["host"])
+
+            return filtered_result
 
     def _build_discovery_message(self, iface: str) -> bytes:
         """Builds the discovery message for the given interface.
