@@ -609,9 +609,20 @@ class Driver(object):
             return False
 
         def do() -> bool:
-            self.clear_plc_output()
+            # The firmware behaves differently when stopping jogging:
+            # - Status bit toggles if jogging was active before.
+            # - GPE bit from when jogging was started must be preserved.
+            # We do not send a zero-frame as that would trigger the status bit
+            # and clear the GPE bit. Stop jogging is intended to be preceded by
+            # start jogging, otherwise this method will always return False
+            # because the status bit won’t change.
+
+            cmd_toggle_before = self.get_status_bit(bit=5)
+            self.set_control_bit(bit=8, value=False)  # stop negative jogging
+            self.set_control_bit(bit=9, value=False)  # stop positive jogging
             self.send_plc_output()
-            return True
+            desired_bits = {"5": cmd_toggle_before ^ 1, "6": 0}
+            return self.wait_for_status(bits=desired_bits)
 
         if scheduler:
             return scheduler.execute(func=partial(do)).result()

@@ -71,9 +71,8 @@ def test_driver_allows_repeatedly_calling_jogging_methods():
         ), f"run: {run}, diagnostics: {driver.get_status_diagnostics()}"
     driver.stop_jogging()
 
-    # Repeated stopping
-    for _ in range(3):
-        assert driver.stop_jogging()
+    # Calls to stop_jogging must be preceeded by start_jogging
+    assert not driver.stop_jogging()
 
     driver.disconnect()
 
@@ -108,5 +107,25 @@ def test_driver_doesnt_start_jogging_with_warnings():
     assert not driver.start_jogging(
         velocity=velocity
     ), f"diagnostics: {driver.get_status_diagnostics()}"
+
+    driver.disconnect()
+
+
+@skip_without_gripper
+def test_driver_toggles_status_bit_after_stop_jogging():
+    driver = Driver()
+
+    assert driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
+    setup = Setup(driver)
+    assert setup.reset()
+    velocity = driver.module_parameters["max_grp_vel"]
+
+    assert driver.start_jogging(velocity=velocity)
+    time.sleep(0.5)
+    before = driver.get_status_bit(bit=5)
+
+    assert driver.stop_jogging()
+    after = driver.get_status_bit(bit=5)
+    assert before != after, f"before: {before}, after: {after}"
 
     driver.disconnect()
