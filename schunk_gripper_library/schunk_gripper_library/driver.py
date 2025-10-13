@@ -237,6 +237,7 @@ class Driver(object):
         def do() -> bool:
             self.clear_plc_output()
             self.send_plc_output()
+            self.receive_plc_input()
             cmd_toggle_before = self.get_status_bit(bit=5)
             self.set_control_bit(bit=2, value=True)
             self.send_plc_output()
@@ -255,6 +256,7 @@ class Driver(object):
         def do() -> bool:
             self.clear_plc_output()
             self.send_plc_output()
+            self.receive_plc_input()
             cmd_toggle_before = self.get_status_bit(bit=5)
             self.set_control_bit(
                 bit=0, value=False
@@ -275,6 +277,7 @@ class Driver(object):
         def do() -> bool:
             self.clear_plc_output()
             self.send_plc_output()
+            self.receive_plc_input()
             cmd_toggle_before = self.get_status_bit(bit=5)
             self.set_control_bit(bit=1, value=True)
             if self.gpe_available():
@@ -297,6 +300,7 @@ class Driver(object):
         def do() -> bool:
             self.clear_plc_output()
             self.send_plc_output()
+            self.receive_plc_input()
             cmd_toggle_before = self.get_status_bit(bit=5)
             self.set_control_bit(bit=3, value=True)
             self.send_plc_output()
@@ -331,6 +335,7 @@ class Driver(object):
         def start():
             self.clear_plc_output()
             self.send_plc_output()
+            self.receive_plc_input()
             cmd_toggle_before = self.get_status_bit(bit=5)
             self.set_control_bit(bit=trigger_bit, value=True)
             if self.gpe_available():
@@ -390,7 +395,7 @@ class Driver(object):
         def start() -> bool:
             self.clear_plc_output()
             self.send_plc_output()
-
+            self.receive_plc_input()
             cmd_toggle_before = self.get_status_bit(bit=5)
             self.set_control_bit(bit=trigger_bit, value=True)
             self.set_control_bit(bit=7, value=outward)
@@ -438,6 +443,7 @@ class Driver(object):
         def start() -> bool:
             self.clear_plc_output()
             self.send_plc_output()
+            self.receive_plc_input()
             cmd_toggle_before = self.get_status_bit(bit=5)
             self.set_control_bit(bit=11, value=True)
             if self.gpe_available():
@@ -497,6 +503,7 @@ class Driver(object):
         def start() -> bool:
             self.clear_plc_output()
             self.send_plc_output()
+            self.receive_plc_input()
             cmd_toggle_before = self.get_status_bit(bit=5)
             self.set_control_bit(bit=30, value=True)
             self.send_plc_output()
@@ -571,6 +578,7 @@ class Driver(object):
 
             self.clear_plc_output()
             self.send_plc_output()
+            self.receive_plc_input()
             cmd_toggle_before = self.get_status_bit(bit=5)
 
             if not self.set_target_speed(abs(velocity)):
