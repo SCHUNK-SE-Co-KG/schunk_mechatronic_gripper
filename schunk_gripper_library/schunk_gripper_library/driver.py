@@ -349,23 +349,39 @@ class Driver(object):
             return self.wait_for_status(bits=desired_bits, timeout_sec=0.1)
 
         def check():
-            desired_bits = {"13": 1, "4": 1}
+            desired_bits = {"4": 1, "13": 1}  # command successful and position reached
             return self.wait_for_status(bits=desired_bits)
 
-        duration_sec = self.estimate_duration(
-            position_abs=position, is_absolute=is_absolute, velocity=velocity
-        )
+        # send the move command
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
                 return False
-            if self.error_in(duration_sec):
-                return False
-            return scheduler.execute(func=partial(check)).result()
         else:
             if not start():
                 return False
-            if self.error_in(duration_sec):
-                return False
+
+        # estimate how long the move will take
+        epsilon_sec = 0.5  # additional time to account for delays
+        estimated_duration_sec = self.estimate_duration(
+            position_abs=position, is_absolute=is_absolute, velocity=velocity
+        )
+        duration_sec = estimated_duration_sec + epsilon_sec
+
+        # wait until either an error occurs or the move completes
+        wait_deadline_sec = time.time() + duration_sec
+        while time.time() < wait_deadline_sec:
+            # check if gripper is in error state
+            if self.get_status_bit(bit=7) == 1:
+                break
+            # check if move completed (i. e. command successful and position reached)
+            if self.get_status_bit(bit=4) == 1 and self.get_status_bit(bit=13) == 1:
+                break
+            time.sleep(self.update_cycle)
+
+        # check if move succeeded
+        if scheduler:
+            return scheduler.execute(func=partial(check)).result()
+        else:
             return check()
 
     def grip(
@@ -415,23 +431,39 @@ class Driver(object):
             return self.wait_for_status(bits=desired_bits, timeout_sec=0.1)
 
         def check() -> bool:
-            desired_bits = {"4": 1, "12": 1}
+            desired_bits = {"4": 1, "12": 1}  # command successful and workpiece gripped
             return self.wait_for_status(bits=desired_bits)
 
-        duration_sec = self.estimate_duration(
-            position_abs=position, velocity=velocity, force=force, outward=outward
-        )
+        # send the grip command
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
                 return False
-            if self.error_in(duration_sec):
-                return False
-            return scheduler.execute(func=partial(check)).result()
         else:
             if not start():
                 return False
-            if self.error_in(duration_sec):
-                return False
+
+        # estimate how long the grip will take
+        epsilon_sec = 0.5  # additional time to account for delays
+        estimated_duration_sec = self.estimate_duration(
+            position_abs=position, velocity=velocity, force=force, outward=outward
+        )
+        duration_sec = estimated_duration_sec + epsilon_sec
+
+        # wait until either an error occurs or the grip completes
+        wait_deadline_sec = time.time() + duration_sec
+        while time.time() < wait_deadline_sec:
+            # check if gripper is in error state
+            if self.get_status_bit(bit=7) == 1:
+                break
+            # check if grip completed (i. e. command successful and workpiece gripped)
+            if self.get_status_bit(bit=4) == 1 and self.get_status_bit(bit=12) == 1:
+                break
+            time.sleep(self.update_cycle)
+
+        # check if grip succeeded
+        if scheduler:
+            return scheduler.execute(func=partial(check)).result()
+        else:
             return check()
 
     def release(
@@ -458,24 +490,37 @@ class Driver(object):
             return self.wait_for_status(bits=desired_bits)
 
         def check() -> bool:
-            desired_bits = {
-                "4": 1,
-                "13": 1,
-            }
+            desired_bits = {"4": 1, "13": 1}  # command successful and position reached
             return self.wait_for_status(bits=desired_bits)
 
-        duration_sec = self.estimate_duration(release=True)
+        # send the release command
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
                 return False
-            if self.error_in(duration_sec):
-                return False
-            return scheduler.execute(func=partial(check)).result()
         else:
             if not start():
                 return False
-            if self.error_in(duration_sec):
-                return False
+
+        # estimate how long the release will take
+        epsilon_sec = 0.5  # additional time to account for delays
+        estimated_duration_sec = self.estimate_duration(release=True)
+        duration_sec = estimated_duration_sec + epsilon_sec
+
+        # wait until either an error occurs or the release completes
+        wait_deadline_sec = time.time() + duration_sec
+        while time.time() < wait_deadline_sec:
+            # check if gripper is in error state
+            if self.get_status_bit(bit=7) == 1:
+                break
+            # check if release completed (i. e. command successful and position reached)
+            if self.get_status_bit(bit=4) == 1 and self.get_status_bit(bit=13) == 1:
+                break
+            time.sleep(self.update_cycle)
+
+        # check if release succeeded
+        if scheduler:
+            return scheduler.execute(func=partial(check)).result()
+        else:
             return check()
 
     def show_specification(self) -> dict[str, float | str]:
@@ -546,7 +591,8 @@ class Driver(object):
             if isinstance(velocity, int) and velocity > 0:
                 return abs(still_to_go) / velocity
             if isinstance(force, int) and force > 0:
-                grip_vel = (force / 100) * self.module_parameters["max_grp_vel"]
+                ratio = min(1.0, (force / 100))
+                grip_vel = ratio * self.module_parameters["max_grp_vel"]
                 return abs(still_to_go) / grip_vel
             return 0.0
 
@@ -561,7 +607,7 @@ class Driver(object):
                 )
             if isinstance(velocity, int) and velocity > 0:
                 return abs(still_to_go) / velocity
-            ratio = force / 100
+            ratio = min(1.0, force / 100)
             return abs(still_to_go) / (ratio * self.module_parameters["max_grp_vel"])
         return 0.0
 
@@ -933,18 +979,6 @@ class Driver(object):
             if time.time() > max_duration:
                 return False
         return True
-
-    def error_in(self, duration_sec: float) -> bool:
-        if not isinstance(duration_sec, float):
-            return False
-        if duration_sec < 0.0:
-            return False
-        duration = time.time() + duration_sec
-        while time.time() < duration:
-            if self.get_status_bit(bit=7) == 1:
-                return True
-            time.sleep(self.update_cycle)
-        return False
 
     def contains_non_hex_chars(self, buffer: str) -> bool:
         return bool(re.search(r"[^0-9a-fA-F]", buffer))
