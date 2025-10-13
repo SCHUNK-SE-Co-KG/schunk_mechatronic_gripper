@@ -29,6 +29,7 @@ rosidl_generate_interfaces(
     srv/MoveToRelativePositionGPE.srv
     srv/ReadGripperParameter.srv
     srv/Release.srv
+    srv/ReleaseWithGPE.srv
     srv/ScanGrippers.srv
     srv/ShowConfiguration.srv
     srv/ShowGripperSpecification.srv

@@ -1,0 +1,7 @@
+bool use_gpe  # Whether to use position maintenance after releasing the grip.
+              # Will only be used when available in the gripper.
+              # Defaults to False.
+
+---
+bool success
+string message
