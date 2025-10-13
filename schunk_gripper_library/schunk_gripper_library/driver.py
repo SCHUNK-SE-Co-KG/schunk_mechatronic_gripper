@@ -980,6 +980,18 @@ class Driver(object):
                 return False
         return True
 
+    def error_in(self, duration_sec: float) -> bool:
+        if not isinstance(duration_sec, float):
+            return False
+        if duration_sec < 0.0:
+            return False
+        duration = time.time() + duration_sec
+        while time.time() < duration:
+            if self.get_status_bit(bit=7) == 1:
+                return True
+            time.sleep(self.update_cycle)
+        return False
+
     def contains_non_hex_chars(self, buffer: str) -> bool:
         return bool(re.search(r"[^0-9a-fA-F]", buffer))
 
