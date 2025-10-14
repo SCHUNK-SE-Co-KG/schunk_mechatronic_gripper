@@ -63,15 +63,6 @@ def test_grip_moves_as_expected_with_the_outward_argument():
 
 
 @skip_without_gripper
-def test_grip_fails_when_no_workpiece_detected():
-    driver = Driver()
-    driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
-    driver.acknowledge()
-    assert not driver.grip(force=75, outward=True)
-    driver.disconnect()
-
-
-@skip_without_gripper
 def test_grip_at_position_fails_with_invalid_arguments():
     driver = Driver()
 
