@@ -564,6 +564,16 @@ class Driver(Node):
             )
             self.gripper_services.append(
                 self.create_service(
+                    srv_type=Trigger,
+                    srv_name=f"~/{gripper_id}/release_for_manual_movement",
+                    callback=partial(
+                        self._release_for_manual_movement_cb, gripper=gripper
+                    ),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+            self.gripper_services.append(
+                self.create_service(
                     srv_type=(
                         StartJoggingGPE
                         if gripper["driver"].gpe_available()
@@ -1130,6 +1140,24 @@ class Driver(Node):
             response.success = gripper["driver"].release(
                 use_gpe=use_gpe,
             )
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _release_for_manual_movement_cb(
+        self,
+        request: Trigger.Request,
+        response: Trigger.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Release for manual movement")
+        if self.needs_synchronize(gripper):
+            pass
+            # response.success = gripper["driver"].release_for_manual_movement(
+            #     scheduler=self.scheduler
+            # )
+        else:
+            pass
+            # response.success = gripper["driver"].release_for_manual_movement()
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
