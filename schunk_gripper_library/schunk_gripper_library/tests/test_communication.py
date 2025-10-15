@@ -1,5 +1,5 @@
 from schunk_gripper_library.driver import Driver
-from schunk_gripper_library.utility import skip_without_gripper
+from schunk_gripper_library.utility import skip_without_gripper, Scheduler
 import pytest
 import struct
 from threading import Timer
@@ -26,6 +26,13 @@ def test_driver_implements_connect_and_disconnect():
     assert driver.web_client is not None
     assert driver.disconnect()
     assert driver.web_client is None
+
+    # With a scheduler
+    scheduler = Scheduler()
+    scheduler.start()
+    assert driver.connect(serial_port="/dev/ttyUSB0", device_id=12, scheduler=scheduler)
+    assert driver.disconnect()
+    scheduler.stop()
 
 
 def test_driver_rejects_invalid_connection_arguments():
@@ -210,87 +217,23 @@ def test_driver_supports_sending_and_receiving_after_switching_protocols():
 
 
 @skip_without_gripper
-def test_driver_supports_reading_module_parameters():
-    driver = Driver()
-
-    # Can't read when not connected
-    for param in driver.readable_parameters.keys():
-        assert not driver.read_module_parameter(param=param)
-
-    # Reject unsupported parameters
-    for host, port, serial_port in zip(
-        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
-    ):
-        for param in ["not-ok", "?!#" "-1"]:
-            driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
-            assert not driver.read_module_parameter(param)
-        driver.disconnect()
-
-    # All params have the correct size
-    for host, port, serial_port in zip(
-        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
-    ):
-        driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
-        for key, value in driver.readable_parameters.items():
-            result = driver.read_module_parameter(key)
-            assert len(result) == value["registers"] * 2  # two bytes per register
-        driver.disconnect()
-
-
-@skip_without_gripper
-def test_driver_supports_writing_module_parameters():
-    driver = Driver()
-
-    # Can't write when not connected
-    data = bytearray()
-    assert not driver.write_module_parameter("0x0048", data)
-
-    # Reject unsupported parameters
-    for host, port, serial_port in zip(
-        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
-    ):
-        for param in ["not-existent", "1234" "0x0"]:
-            driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
-            assert not driver.write_module_parameter(param, bytearray())
-        driver.disconnect()
-
-    # Data arguments must have the correct sizes
-    for host, port, serial_port in zip(
-        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
-    ):
-        driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
-
-        # Correct
-        for key, value in driver.writable_parameters.items():
-            byte_size = value["registers"] * 2
-            data = bytearray(bytes.fromhex("00" * byte_size))
-            assert driver.write_module_parameter(key, data)
-
-        # Incorrect
-        for key, value in driver.writable_parameters.items():
-            data = bytearray()
-            assert not driver.write_module_parameter(key, data)
-        driver.disconnect()
-
-
-@skip_without_gripper
 def test_connected_driver_has_associated_module_and_fieldbus():
     driver = Driver()
 
     # empty on startup
-    assert not driver.module
+    assert not driver.module_type
     assert not driver.fieldbus
 
     for host, port, serial_port in zip(
         ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
     ):
         driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
-        assert driver.module in driver.valid_module_types.values()
+        assert driver.module_type in driver.valid_module_types.values()
         assert driver.fieldbus in driver.valid_fieldbus_types.values()
 
         # empty after disconnect
         driver.disconnect()
-        assert not driver.module
+        assert not driver.module_type
         assert not driver.fieldbus
 
 
@@ -321,11 +264,11 @@ def test_driver_can_check_for_gpe_support():
     ]
 
     for type in types_with_gpe:
-        driver.module = type
+        driver.module_type = type
         assert driver.gpe_available()
 
     for type in types_without_gpe:
-        driver.module = type
+        driver.module_type = type
         assert not driver.gpe_available()
 
 
@@ -498,13 +441,13 @@ def test_driver_estimates_duration_of_grip_operations():
 
     # Fully closed
     set_actual_position(min_pos)
-    forces = [50, 75, 100]
+    forces = [130, 175, 200]
     for force in forces:
         assert pytest.approx(driver.estimate_duration(force=force)) == 0.0
 
     # Fully open
     set_actual_position(max_pos)
-    forces = [50, 75, 100]
+    forces = [130, 175, 200]
     for force in forces:
         assert pytest.approx(driver.estimate_duration(force=force, outward=True)) == 0.0
 
@@ -558,7 +501,7 @@ def test_driver_estimates_duration_of_grip_at_position():
 
     # Fix position, vary force
     set_actual_position(min_pos)
-    forces = [50, 75, 100]
+    forces = [130, 175, 200]
     durations = []
     for force in forces:
         duration = driver.estimate_duration(position_abs=mid_pos, force=force)
@@ -566,7 +509,7 @@ def test_driver_estimates_duration_of_grip_at_position():
     assert durations[0] > durations[1] > durations[2]
 
     # Fix force, vary position
-    fixed_force = 75
+    fixed_force = 175
     positions = [min_pos + 1000, mid_pos, max_pos]
     durations = []
     for position in positions:
@@ -580,7 +523,7 @@ def test_driver_estimates_duration_of_grip_at_position():
 
 
 @skip_without_gripper
-def test_driver_estimates_duration_of_soft_grip():
+def test_driver_estimates_duration_of_grip_with_velocity():
     driver = Driver()
 
     driver.connect(serial_port="/dev/ttyUSB0", device_id=12, update_cycle=None)
@@ -611,7 +554,7 @@ def test_driver_estimates_duration_of_soft_grip():
 
 
 @skip_without_gripper
-def test_driver_estimates_duration_of_soft_grip_at_position():
+def test_driver_estimates_duration_of_grip_at_position_with_velocity():
     driver = Driver()
     driver.connect(serial_port="/dev/ttyUSB0", device_id=12, update_cycle=None)
 
@@ -655,126 +598,6 @@ def test_driver_estimates_duration_of_soft_grip_at_position():
 
     # Cleanup
     driver.disconnect()
-
-
-@skip_without_gripper
-def test_driver_estimates_duration_of_strong_grip():
-    driver = Driver()
-
-    driver.connect(serial_port="/dev/ttyUSB0", device_id=12, update_cycle=None)
-    max_pos = driver.module_parameters["max_pos"]
-    min_pos = driver.module_parameters["min_pos"]
-    mid_pos = (min_pos + max_pos) // 2
-
-    def set_actual_position(position: int) -> None:
-        driver.plc_input_buffer[4:8] = bytes(struct.pack("i", position))
-
-    # Start at mid_pos
-    set_actual_position(mid_pos)
-    forces = [130, 175, 200]
-
-    durations = []
-    for force in forces:
-        duration = driver.estimate_duration(force=force)
-        durations.append(duration)
-
-    assert durations[0] > durations[1] > durations[2]
-
-    # Cleanup
-    driver.disconnect()
-
-
-@skip_without_gripper
-def test_driver_estimates_duration_of_strong_grip_at_position():
-    driver = Driver()
-    driver.connect(serial_port="/dev/ttyUSB0", device_id=12, update_cycle=None)
-
-    max_pos = driver.module_parameters["max_pos"]
-    min_pos = driver.module_parameters["min_pos"]
-    mid_pos = (min_pos + max_pos) // 2
-
-    def set_actual_position(position: int) -> None:
-        driver.plc_input_buffer[4:8] = bytes(struct.pack("i", position))
-
-    # Fix position, vary force
-    set_actual_position(mid_pos - 1000)
-    forces = [130, 175, 200]
-    durations = []
-    for force in forces:
-        duration = driver.estimate_duration(position_abs=mid_pos, force=force)
-        durations.append(duration)
-    assert durations[0] > durations[1] > durations[2]
-
-    # Fix force, vary position
-    fixed_force = 175
-    positions = [min_pos + 1000, mid_pos, max_pos]
-    durations = []
-    for position in positions:
-        set_actual_position(min_pos)
-        duration = driver.estimate_duration(position_abs=position, force=fixed_force)
-        durations.append(duration)
-    assert durations[0] < durations[1] < durations[2]
-
-    # Cleanup
-    driver.disconnect()
-
-
-@skip_without_gripper
-def test_connected_driver_has_module_parameters():
-    driver = Driver()
-    params = [
-        "module_type",
-        "max_grp_vel",
-        "max_vel",
-        "min_pos",
-        "max_pos",
-        "wp_release_delta",
-        "fieldbus_type",
-        "max_phys_stroke",
-        "max_grp_force",
-        "serial_no_txt",
-        "sw_version_txt",
-    ]
-    for param in params:
-        assert param in driver.module_parameters
-        assert driver.module_parameters[param] is None
-
-    for host, port, serial_port in zip(
-        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
-    ):
-        driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
-        for param in params:
-            assert driver.module_parameters[param] is not None
-
-        driver.disconnect()
-        for param in params:
-            assert driver.module_parameters[param] is None
-
-
-@skip_without_gripper
-def test_driver_offers_updating_internal_module_parameters():
-    driver = Driver()
-
-    # Parameters are updated when connected
-    for host, port, serial_port in zip(
-        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
-    ):
-        driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
-        assert driver.update_module_parameters()
-        for key, value in driver.module_parameters.items():
-            assert value is not None, f"key: {key}"
-
-        # Repetitive
-        for _ in range(3):
-            assert driver.update_module_parameters()
-            for key, value in driver.module_parameters.items():
-                assert value is not None, f"key: {key}"
-
-        # Values are reset when disconnected
-        driver.disconnect()
-        assert driver.update_module_parameters()
-        for key, value in driver.module_parameters.items():
-            assert value is None, f"key: {key}"
 
 
 def test_driver_offers_waiting_until_error():
@@ -847,7 +670,7 @@ def test_driver_offers_showing_gripper_specification():
 @skip_without_gripper
 def test_connected_driver_has_associated_gripper():
     driver = Driver()
-    assert not driver.gripper  # empty on startup
+    assert not driver.gripper_type  # empty on startup
 
     for host, port, serial_port in zip(
         ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
@@ -855,7 +678,7 @@ def test_connected_driver_has_associated_gripper():
         driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
 
         # We have this convention: {EGU|EGK|EZU}_{xx}_{PN|EI|EC|MB}_{M|N}_{B|SD}
-        parts = driver.gripper.split("_")
+        parts = driver.gripper_type.split("_")
         print(parts)
         assert parts[0] in ["EGU", "EGK", "EZU"]
         assert int(parts[1])
@@ -864,16 +687,16 @@ def test_connected_driver_has_associated_gripper():
         assert parts[4] in ["B", "SD"]
 
         driver.disconnect()
-        assert not driver.gripper  # empty after disconnect
+        assert not driver.gripper_type  # empty after disconnect
 
 
 def test_driver_offers_method_for_composing_gripper_type():
     driver = Driver()
 
     invalid_combinations = [
-        {"args": {"module": "EGU_50_", "fieldbus": "EC"}},
-        {"args": {"module": "EGU_50_M_B", "fieldbus": "AA"}},
-        {"args": {"module": "0x?|^$%", "fieldbus": "PN"}},
+        {"args": {"module_type": "EGU_50_", "fieldbus": "EC"}},
+        {"args": {"module_type": "EGU_50_M_B", "fieldbus": "AA"}},
+        {"args": {"module_type": "0x?|^$%", "fieldbus": "PN"}},
     ]
     for entry in invalid_combinations:
         gripper_type = driver.compose_gripper_type(**entry["args"])
@@ -881,27 +704,27 @@ def test_driver_offers_method_for_composing_gripper_type():
 
     valid_combinations = [
         {
-            "args": {"module": "EGU_50_M_B", "fieldbus": "EC"},
+            "args": {"module_type": "EGU_50_M_B", "fieldbus": "EC"},
             "expected": "EGU_50_EC_M_B",
         },
         {
-            "args": {"module": "EGU_80_N_SD", "fieldbus": "EI"},
+            "args": {"module_type": "EGU_80_N_SD", "fieldbus": "EI"},
             "expected": "EGU_80_EI_N_SD",
         },
         {
-            "args": {"module": "EZU_35_N_B", "fieldbus": "MB"},
+            "args": {"module_type": "EZU_35_N_B", "fieldbus": "MB"},
             "expected": "EZU_35_MB_N_B",
         },
         {
-            "args": {"module": "EZU_40_N_SD", "fieldbus": "MB"},
+            "args": {"module_type": "EZU_40_N_SD", "fieldbus": "MB"},
             "expected": "EZU_40_MB_N_SD",
         },
         {
-            "args": {"module": "EGK_25_M_B", "fieldbus": "MB"},
+            "args": {"module_type": "EGK_25_M_B", "fieldbus": "MB"},
             "expected": "EGK_25_MB_M_B",
         },
         {
-            "args": {"module": "EGK_50_N_B", "fieldbus": "PN"},
+            "args": {"module_type": "EGK_50_N_B", "fieldbus": "PN"},
             "expected": "EGK_50_PN_N_B",
         },
     ]
@@ -915,7 +738,7 @@ def test_driver_can_detect_variant():
     assert driver.get_variant() == ""  # when unconnected
 
     for module in driver.valid_module_types.values():
-        driver.module = module
+        driver.module_type = module
         expected = module.split("_")[0]
         assert driver.get_variant() == expected
 
@@ -935,5 +758,5 @@ def test_driver_can_detect_variant():
     ]
 
     for idx, type_str in enumerate(unknown_types):
-        driver.module = type_str
+        driver.module_type = type_str
         assert driver.get_variant() == "", f"wrong type at index: {idx}"

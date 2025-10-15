@@ -13,27 +13,32 @@ find_package(std_msgs REQUIRED)
 rosidl_generate_interfaces(
   ${PROJECT_NAME}
     srv/AddGripper.srv
+    srv/Grip.srv
+    srv/GripAtPosition.srv
+    srv/GripAtPositionWithGPE.srv
+    srv/GripAtPositionWithVelocity.srv
+    srv/GripAtPositionWithVelocityAndGPE.srv
+    srv/GripWithGPE.srv
+    srv/GripWithVelocity.srv
+    srv/GripWithVelocityAndGPE.srv
     srv/ListGrippers.srv
+    srv/LocateGripper.srv
     srv/MoveToAbsolutePosition.srv
     srv/MoveToAbsolutePositionGPE.srv
     srv/MoveToRelativePosition.srv
     srv/MoveToRelativePositionGPE.srv
-    srv/Grip.srv
-    srv/GripGPE.srv
-    srv/GripAtPosition.srv
-    srv/GripAtPositionGPE.srv
-    srv/SoftGrip.srv
-    srv/SoftGripGPE.srv
-    srv/SoftGripAtPosition.srv
-    srv/SoftGripAtPositionGPE.srv
-    srv/StrongGripGPE.srv
-    srv/StrongGripAtPositionGPE.srv
+    srv/ReadGripperParameter.srv
     srv/Release.srv
+    srv/ReleaseWithGPE.srv
     srv/ScanGrippers.srv
     srv/ShowConfiguration.srv
     srv/ShowGripperSpecification.srv
     srv/StartJogging.srv
     srv/StartJoggingGPE.srv
+    srv/Stop.srv
+    srv/StopWithGPE.srv
+    srv/WriteGripperParameter.srv
+    srv/PrepareForShutdown.srv
     msg/ConnectionState.msg
     msg/Gripper.msg
     msg/GripperState.msg

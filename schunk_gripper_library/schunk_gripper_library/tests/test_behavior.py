@@ -1,6 +1,6 @@
 from schunk_gripper_library.driver import Driver
 from schunk_gripper_library.utility import skip_without_gripper, Scheduler
-import pytest
+import time
 
 
 @skip_without_gripper
@@ -86,8 +86,14 @@ def test_all_gripper_commands_run_with_a_scheduler():
 
     # Jogging
     assert driver.acknowledge(scheduler=scheduler)
-    assert driver.start_jogging(velocity=driver.module_parameters["max_grp_vel"])
-    assert driver.stop_jogging()
+    assert driver.start_jogging(
+        velocity=driver.module_parameters["max_grp_vel"], scheduler=scheduler
+    )
+    assert driver.stop_jogging(scheduler=scheduler)
+
+    # Twitching the jaws
+    assert driver.acknowledge(scheduler=scheduler)
+    assert driver.twitch_jaws(scheduler=scheduler)
 
     driver.disconnect()
     scheduler.stop()
@@ -217,7 +223,6 @@ def test_move_to_relative_position_fails_with_invalid_arguments():
         driver.disconnect()
 
 
-@pytest.mark.skip
 @skip_without_gripper
 def test_stop():
     driver = Driver()
@@ -233,7 +238,27 @@ def test_stop():
         )
         assert driver.acknowledge()
 
-        assert driver.stop()
+        assert driver.stop(use_gpe=False)
+        assert driver.stop(use_gpe=True)
+        assert driver.disconnect()
+
+
+@skip_without_gripper
+def test_prepare_for_shutdown():
+    driver = Driver()
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        # Not connected
+        assert not driver.prepare_for_shutdown()
+
+        # after connection
+        assert driver.connect(
+            host=host, port=port, serial_port=serial_port, device_id=12
+        )
+        assert driver.acknowledge()
+
+        assert driver.prepare_for_shutdown()
         assert driver.disconnect()
 
 
@@ -262,3 +287,82 @@ def test_release():
             assert driver.release(use_gpe=True)
 
         assert driver.disconnect()
+
+
+@skip_without_gripper
+def test_brake_test():
+    driver = Driver()
+
+    # TCP/IP
+    assert driver.connect(host="0.0.0.0", port=8000)
+    assert driver.acknowledge()
+    assert driver.brake_test()
+    driver.disconnect()
+
+    # Modbus
+    assert driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
+    assert driver.acknowledge()
+
+    # Check that we give sufficient time for real modules to carry out the brake test.
+    # We measured this on the real modules.
+    start = time.time()
+    driver.brake_test()  # fails in simulation
+    duration = time.time() - start
+    assert duration > 4.0  # sec
+
+    assert driver.disconnect()
+
+
+@skip_without_gripper
+def test_twitching_jaws_leaves_gripper_where_it_is():
+    driver = Driver()
+
+    # When not connected
+    assert not driver.twitch_jaws()
+
+    # Only web dummy for now.
+    # The BKS firmware has inconsistent accuracy for motion commands
+    assert driver.connect(host="0.0.0.0", port=8000, update_cycle=None)
+    driver.acknowledge()
+
+    max_pos = driver.module_parameters["max_pos"]
+    min_pos = driver.module_parameters["min_pos"]
+    half = int(0.5 * (max_pos - min_pos))
+    driver.move_to_position(
+        position=half, velocity=driver.module_parameters["max_vel"], is_absolute=True
+    )
+
+    before = driver.get_actual_position()
+    assert driver.twitch_jaws()
+    after = driver.get_actual_position()
+    assert after == before
+
+    driver.disconnect()
+
+
+@skip_without_gripper
+def test_twitching_jaws_considers_limits():
+    driver = Driver()
+
+    # Only on Modbus.
+    # Whe need to check with realistic limits
+    assert driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
+    driver.acknowledge()
+
+    # When fully open
+    driver.move_to_position(
+        position=driver.module_parameters["max_pos"],
+        velocity=driver.module_parameters["max_vel"],
+        is_absolute=True,
+    )
+    assert driver.twitch_jaws()
+
+    # When fully closed
+    driver.move_to_position(
+        position=driver.module_parameters["min_pos"],
+        velocity=driver.module_parameters["max_vel"],
+        is_absolute=True,
+    )
+    assert driver.twitch_jaws()
+
+    driver.disconnect()

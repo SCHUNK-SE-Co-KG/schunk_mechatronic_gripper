@@ -28,21 +28,26 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     MoveToRelativePosition,
     MoveToRelativePositionGPE,
     Grip,
-    GripGPE,
+    GripWithGPE,
     GripAtPosition,
-    GripAtPositionGPE,
-    SoftGrip,
-    SoftGripGPE,
-    SoftGripAtPosition,
-    SoftGripAtPositionGPE,
-    StrongGripGPE,
-    StrongGripAtPositionGPE,
+    GripAtPositionWithGPE,
+    GripWithVelocity,
+    GripWithVelocityAndGPE,
+    GripAtPositionWithVelocity,
+    GripAtPositionWithVelocityAndGPE,
     Release,
+    ReleaseWithGPE,
     StartJogging,
     StartJoggingGPE,
     ShowConfiguration,
     ShowGripperSpecification,
     ScanGrippers,
+    LocateGripper,
+    ReadGripperParameter,
+    WriteGripperParameter,
+    Stop,
+    StopWithGPE,
+    PrepareForShutdown,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -66,6 +71,7 @@ import json
 from collections import OrderedDict
 import time
 from typing import Any
+import re
 
 
 class Gripper(TypedDict):
@@ -121,6 +127,7 @@ class Driver(Node):
         self.declare_parameter("log_level", "INFO")
 
         self.scheduler: Scheduler = Scheduler()
+        self.scheduler.start()
         self.gripper_services: list[Service] = []
         self.joint_state_publishers: dict[str, Publisher] = {}
         self.gripper_state_publishers: dict[str, Publisher] = {}
@@ -149,6 +156,11 @@ class Driver(Node):
             ScanGrippers,
             "~/scan",
             self._scan_grippers_cb,
+        )
+        self.locate_gripper_srv = self.create_service(
+            LocateGripper,
+            "~/locate_gripper",
+            self._locate_gripper_cb,
         )
         self.add_on_set_parameters_callback(self._param_cb)
 
@@ -200,6 +212,23 @@ class Driver(Node):
                 devices.append(id)
         return devices
 
+    def get_unique_id(self, gripper: str) -> str:
+        known_ids = [entry["gripper_id"] for entry in self.grippers]
+
+        def increment(name: str) -> str:
+            if name.split("_")[-1].isdigit():
+                count = int(name.split("_")[-1]) + 1
+                name = "_".join(name.split("_")[:-1])
+                name += f"_{count}"
+            else:
+                name = f"{name}_1"
+            return name
+
+        unique_id = increment(gripper)
+        while unique_id in known_ids:
+            unique_id = increment(unique_id)
+        return unique_id
+
     def show_configuration(self) -> list[GripperConfig]:
         configuration = []
         for gripper in self.grippers:
@@ -231,6 +260,7 @@ class Driver(Node):
             configuration = []
             for gripper in self.grippers:
                 entry: OrderedDict[str, str | int] = OrderedDict()
+                entry["gripper_id"] = gripper["gripper_id"]
                 entry["host"] = gripper["host"]
                 entry["port"] = gripper["port"]
                 entry["serial_port"] = gripper["serial_port"]
@@ -276,7 +306,12 @@ class Driver(Node):
         return True
 
     def add_gripper(
-        self, host: str = "", port: int = 0, serial_port: str = "", device_id: int = 0
+        self,
+        gripper_id: str = "",
+        host: str = "",
+        port: int = 0,
+        serial_port: str = "",
+        device_id: int = 0,
     ) -> bool:
         LOG_NS = "Add gripper:"
         if not any([host, port, serial_port, device_id]):
@@ -308,14 +343,30 @@ class Driver(Node):
                         f"{LOG_NS} serial_port and device_id already used"
                     )
                     return False
+
+        driver = GripperDriver()
+        if not gripper_id:
+            scheduler = self.scheduler if serial_port else None
+            if not driver.connect(
+                host=host,
+                port=port,
+                serial_port=serial_port,
+                device_id=device_id,
+                update_cycle=None,
+                scheduler=scheduler,
+            ):
+                return False
+            gripper_id = self.get_unique_id(driver.gripper_type)
+            driver.disconnect()
+
         self.grippers.append(
             {
                 "host": host,
                 "port": port,
                 "serial_port": serial_port,
                 "device_id": device_id,
-                "driver": GripperDriver(),
-                "gripper_id": "",
+                "driver": driver,
+                "gripper_id": gripper_id,
             }
         )
         return True
@@ -338,44 +389,33 @@ class Driver(Node):
         self.get_logger().debug("on_configure() is called.")
         if not self.grippers:
             return TransitionCallbackReturn.FAILURE
-        self.scheduler.start()
 
-        # Connect each gripper
+        # Try to connect each gripper
         for idx, gripper in enumerate(self.grippers):
             driver = GripperDriver()
-            if self.needs_synchronize(gripper):
-                update_cycle = None
-            else:
-                update_cycle = 0.05
-            if not driver.connect(
+            scheduler = self.scheduler if gripper["serial_port"] else None
+            driver.connect(
                 host=gripper["host"],
                 port=gripper["port"],
                 serial_port=gripper["serial_port"],
                 device_id=gripper["device_id"],
-                update_cycle=update_cycle,
-            ):
-                self.get_logger().warn(f"Gripper connect failed: {gripper}")
-                return TransitionCallbackReturn.FAILURE
-            else:
-                self.grippers[idx]["driver"] = driver
+                update_cycle=None,
+                scheduler=scheduler,
+            )
+            self.grippers[idx]["driver"] = driver
 
-        # Set unique gripper IDs
-        devices = []
+        # Update empty gripper IDs
         for idx, gripper in enumerate(self.grippers):
-            id = f"{gripper['driver'].gripper}_1"
-            while id in devices:
-                count = int(id.split("_")[-1]) + 1
-                id = id[:-2] + f"_{count}"
-            devices.append(id)
-            self.grippers[idx]["gripper_id"] = id
+            if not gripper["gripper_id"]:
+                self.grippers[idx]["gripper_id"] = self.get_unique_id(
+                    gripper=gripper["driver"].gripper_type
+                )
 
-        # Start cyclic updates for each gripper
+        # Start cyclic updates with reconnect mechanism for each gripper
         for idx, _ in enumerate(self.grippers):
             gripper = self.grippers[idx]
-            if self.needs_synchronize(gripper):
-                self.scheduler.cyclic_execute(
-                    func=partial(gripper["driver"].receive_plc_input), cycle_time=0.05
-                )
+            scheduler = self.scheduler if self.needs_synchronize(gripper) else None
+            gripper["driver"].start_module_updates(scheduler=scheduler)
 
         # Start info services
         self.list_grippers_srv = self.create_service(
@@ -388,6 +428,7 @@ class Driver(Node):
         self.destroy_service(self.show_configuration_srv)
         self.destroy_service(self.load_previous_configuration_srv)
         self.destroy_service(self.scan_grippers_srv)
+        self.destroy_service(self.locate_gripper_srv)
 
         if self.headless:
             self.get_logger().debug(
@@ -401,16 +442,12 @@ class Driver(Node):
     def on_activate(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().debug("on_activate() is called.")
 
-        # Get every gripper ready to go
+        # Get available grippers ready to go
         for idx, gripper in enumerate(self.grippers):
             if self.needs_synchronize(gripper):
-                success = self.grippers[idx]["driver"].acknowledge(
-                    scheduler=self.scheduler
-                )
+                self.grippers[idx]["driver"].acknowledge(scheduler=self.scheduler)
             else:
-                success = self.grippers[idx]["driver"].acknowledge()
-            if not success:
-                return TransitionCallbackReturn.FAILURE
+                self.grippers[idx]["driver"].acknowledge()
 
         # Gripper-specific services
         for idx, _ in enumerate(self.grippers):
@@ -433,6 +470,23 @@ class Driver(Node):
                     callback_group=self.gripper_services_cb_group,
                 )
             )
+
+            # Set module type if gripper is not connected.
+            # This is important to determine if the gripper has a brake.
+            # If not set, service types will be wrong.
+            if not gripper["driver"].connected:
+                gripper_properties = gripper_id.split("_")
+                # Check if the gripper ID is in the expected format
+                if len(gripper_properties) >= 5:
+                    gripper["driver"].module_type = "_".join(
+                        [
+                            gripper_properties[0],
+                            gripper_properties[1],
+                            gripper_properties[3],
+                            gripper_properties[4],
+                        ]
+                    )
+
             if gripper["driver"].gpe_available():
                 service_types = [MoveToAbsolutePositionGPE, MoveToRelativePositionGPE]
             else:
@@ -454,12 +508,42 @@ class Driver(Node):
                         callback_group=self.gripper_services_cb_group,
                     )
                 )
-            if gripper["driver"].gpe_available():
-                service_types = [GripGPE, GripAtPositionGPE]
-            else:
-                service_types = [Grip, GripAtPosition]
-            service_names = ["grip", "grip_at_position"]
-            for srv_name, srv_type in zip(service_names, service_types):
+            service_type_map = {
+                "EGK": {
+                    False: {
+                        "grip": GripWithVelocity,
+                        "grip_at_position": GripAtPositionWithVelocity,
+                    },
+                    True: {
+                        "grip": GripWithVelocityAndGPE,
+                        "grip_at_position": GripAtPositionWithVelocityAndGPE,
+                    },
+                },
+                "EGU": {
+                    False: {
+                        "grip": Grip,
+                        "grip_at_position": GripAtPosition,
+                    },
+                    True: {
+                        "grip": GripWithGPE,
+                        "grip_at_position": GripAtPositionWithGPE,
+                    },
+                },
+                "EZU": {
+                    False: {
+                        "grip": Grip,
+                        "grip_at_position": GripAtPosition,
+                    },
+                    True: {
+                        "grip": GripWithGPE,
+                        "grip_at_position": GripAtPositionWithGPE,
+                    },
+                },
+            }
+            variant = gripper["driver"].get_variant()
+            use_gpe = gripper["driver"].gpe_available()
+            service_map = service_type_map.get(variant, {}).get(use_gpe, {})
+            for srv_name, srv_type in service_map.items():
                 self.gripper_services.append(
                     self.create_service(
                         srv_type,
@@ -468,42 +552,13 @@ class Driver(Node):
                         callback_group=self.gripper_services_cb_group,
                     )
                 )
-            if gripper["driver"].get_variant() == "EGK":
-                if gripper["driver"].gpe_available():
-                    service_types = [SoftGripGPE, SoftGripAtPositionGPE]
-                else:
-                    service_types = [SoftGrip, SoftGripAtPosition]
-
-                service_names = ["soft_grip", "soft_grip_at_position"]
-                for srv_name, srv_type in zip(service_names, service_types):
-                    self.gripper_services.append(
-                        self.create_service(
-                            srv_type,
-                            f"~/{gripper_id}/{srv_name}",
-                            partial(self._grip_cb, gripper=gripper),
-                            callback_group=self.gripper_services_cb_group,
-                        )
-                    )
-            if (
-                gripper["driver"].get_variant() in ["EGU", "EZU"]
-                and gripper["driver"].gpe_available()
-            ):
-                service_types = [StrongGripGPE, StrongGripAtPositionGPE]
-                service_names = ["strong_grip", "strong_grip_at_position"]
-                for srv_name, srv_type in zip(service_names, service_types):
-                    self.gripper_services.append(
-                        self.create_service(
-                            srv_type,
-                            f"~/{gripper_id}/{srv_name}",
-                            partial(self._grip_cb, gripper=gripper),
-                            callback_group=self.gripper_services_cb_group,
-                        )
-                    )
             self.gripper_services.append(
                 self.create_service(
-                    Release,
-                    f"~/{gripper_id}/release",
-                    partial(self._release_cb, gripper=gripper),
+                    srv_type=(
+                        ReleaseWithGPE if gripper["driver"].gpe_available() else Release
+                    ),
+                    srv_name=f"~/{gripper_id}/release",
+                    callback=partial(self._release_cb, gripper=gripper),
                     callback_group=self.gripper_services_cb_group,
                 )
             )
@@ -533,6 +588,51 @@ class Driver(Node):
                     ShowGripperSpecification,
                     f"~/{gripper_id}/show_specification",
                     partial(self._show_gripper_specification_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+
+            self.gripper_services.append(
+                self.create_service(
+                    Trigger,
+                    f"~/{gripper_id}/brake_test",
+                    partial(self._brake_test_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+            self.gripper_services.append(
+                self.create_service(
+                    ReadGripperParameter,
+                    f"~/{gripper_id}/read_parameter",
+                    partial(self._read_gripper_parameter_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+            self.gripper_services.append(
+                self.create_service(
+                    WriteGripperParameter,
+                    f"~/{gripper_id}/write_parameter",
+                    partial(self._write_gripper_parameter_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+
+            self.gripper_services.append(
+                self.create_service(
+                    srv_type=(
+                        StopWithGPE if gripper["driver"].gpe_available() else Stop
+                    ),
+                    srv_name=f"~/{gripper_id}/stop",
+                    callback=partial(self._stop_cb, gripper=gripper),
+                    callback_group=self.gripper_services_cb_group,
+                )
+            )
+
+            self.gripper_services.append(
+                self.create_service(
+                    srv_type=PrepareForShutdown,
+                    srv_name=f"~/{gripper_id}/prepare_for_shutdown",
+                    callback=partial(self._prepare_for_shutdown_cb, gripper=gripper),
                     callback_group=self.gripper_services_cb_group,
                 )
             )
@@ -592,7 +692,6 @@ class Driver(Node):
 
     def on_cleanup(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().debug("on_cleanup() is called.")
-        self.scheduler.stop()
         for gripper in self.grippers:
             gripper["driver"].disconnect()
             gripper["driver"] = GripperDriver()
@@ -621,11 +720,17 @@ class Driver(Node):
             "~/scan",
             self._scan_grippers_cb,
         )
+        self.locate_gripper_srv = self.create_service(
+            LocateGripper,
+            "~/locate_gripper",
+            self._locate_gripper_cb,
+        )
 
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, state: State) -> TransitionCallbackReturn:
         self.get_logger().debug("on_shutdown() is called.")
+        self.scheduler.stop()
         self.connection_status_stop.set()
         self.connection_status_thread.join()
 
@@ -843,7 +948,7 @@ class Driver(Node):
                 cfg.host = host
                 cfg.port = port
                 response.connections.append(cfg)
-                response.grippers.append(driver.gripper)
+                response.grippers.append(driver.gripper_type)
                 driver.disconnect()
 
         return response
@@ -879,6 +984,25 @@ class Driver(Node):
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
+    def _locate_gripper_cb(
+        self, request: LocateGripper.Request, response: LocateGripper.Response
+    ):
+        self.get_logger().debug("---> Locate gripper")
+        driver = GripperDriver()
+        scheduler = self.scheduler if request.gripper.serial_port else None
+        driver.connect(
+            host=request.gripper.host,
+            port=request.gripper.port,
+            serial_port=request.gripper.serial_port,
+            device_id=request.gripper.device_id,
+            update_cycle=None,
+            scheduler=scheduler,
+        )
+        driver.acknowledge(scheduler=scheduler)
+        response.success = driver.twitch_jaws(scheduler=scheduler)
+        driver.disconnect()
+        return response
+
     def _acknowledge_cb(
         self,
         request: Trigger.Request,
@@ -893,6 +1017,22 @@ class Driver(Node):
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
+    def _stop_cb(
+        self,
+        request: Any,
+        response: Any,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Stop")
+        use_gpe = getattr(request, "use_gpe", False)
+        scheduler = self.scheduler if self.needs_synchronize(gripper) else None
+        response.success = gripper["driver"].stop(
+            scheduler=scheduler,
+            use_gpe=use_gpe,
+        )
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
     def _fast_stop_cb(
         self,
         request: Trigger.Request,
@@ -904,6 +1044,22 @@ class Driver(Node):
             response.success = gripper["driver"].fast_stop(scheduler=self.scheduler)
         else:
             response.success = gripper["driver"].fast_stop()
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _prepare_for_shutdown_cb(
+        self,
+        request: PrepareForShutdown.Request,
+        response: PrepareForShutdown.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Prepare for shutdown")
+        if self.needs_synchronize(gripper):
+            response.success = gripper["driver"].prepare_for_shutdown(
+                scheduler=self.scheduler
+            )
+        else:
+            response.success = gripper["driver"].prepare_for_shutdown()
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
@@ -939,15 +1095,15 @@ class Driver(Node):
         self.get_logger().debug("---> Grip")
         use_gpe = getattr(request, "use_gpe", False)
         scheduler = self.scheduler if self.needs_synchronize(gripper) else None
-        at_position = getattr(request, "at_position", None)
+        position = getattr(request, "position", None)
         velocity = getattr(request, "velocity", None)
-        if at_position is not None:
-            at_position = int(at_position * 1e6)
+        if position is not None:
+            position = int(position * 1e6)
         if velocity is not None:
             velocity = int(velocity * 1e6)
 
         response.success = gripper["driver"].grip(
-            position=at_position,
+            position=position,
             velocity=velocity,
             force=request.force,
             use_gpe=use_gpe,
@@ -959,19 +1115,20 @@ class Driver(Node):
 
     def _release_cb(
         self,
-        request: Release.Request,
-        response: Release.Response,
+        request: Release.Request | ReleaseWithGPE.Request,
+        response: Release.Response | ReleaseWithGPE.Response,
         gripper: Gripper,
     ):
         self.get_logger().debug("---> Release")
+        use_gpe = getattr(request, "use_gpe", False)
         if self.needs_synchronize(gripper):
             response.success = gripper["driver"].release(
-                use_gpe=request.use_gpe,
+                use_gpe=use_gpe,
                 scheduler=self.scheduler,
             )
         else:
             response.success = gripper["driver"].release(
-                use_gpe=request.use_gpe,
+                use_gpe=use_gpe,
             )
         response.message = gripper["driver"].get_status_diagnostics()
         return response
@@ -1003,6 +1160,87 @@ class Driver(Node):
             scheduler=self.scheduler if self.needs_synchronize(gripper) else None,
         )
 
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _brake_test_cb(
+        self,
+        request: Trigger.Request,
+        response: Trigger.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Brake test")
+        response.success = gripper["driver"].brake_test(
+            scheduler=self.scheduler if self.needs_synchronize(gripper) else None,
+        )
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _read_gripper_parameter_cb(
+        self,
+        request: ReadGripperParameter.Request,
+        response: ReadGripperParameter.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Read gripper parameter")
+
+        if self.needs_synchronize(gripper):
+            data = self.scheduler.execute(
+                func=partial(
+                    gripper["driver"].read_module_parameter, param=request.parameter
+                )
+            ).result()
+        else:
+            data = gripper["driver"].read_module_parameter(request.parameter)
+
+        values, value_type = gripper["driver"].decode_module_parameter(
+            data=data, param=request.parameter
+        )
+
+        # Find the corresponding message field for this type
+        # and assign the values to it if existent.
+        msg_field = f"value_{re.split(r'[^a-z0-9]', value_type)[0]}"
+        if getattr(response, msg_field, None) is not None:
+            setattr(response, msg_field, values)
+            response.success = True
+        else:
+            response.success = False
+
+        response.message = gripper["driver"].get_status_diagnostics()
+        return response
+
+    def _write_gripper_parameter_cb(
+        self,
+        request: WriteGripperParameter.Request,
+        response: WriteGripperParameter.Response,
+        gripper: Gripper,
+    ):
+        self.get_logger().debug("---> Write gripper parameter")
+
+        # Find the first non-empty array
+        data: list[Any] = []
+        for elem in dir(request):
+            if elem.startswith("value_"):
+                data = getattr(request, elem, [])
+                if data:
+                    break
+
+        bytes_data = gripper["driver"].encode_module_parameter(
+            data=data, param=request.parameter
+        )
+
+        if self.needs_synchronize(gripper):
+            response.success = self.scheduler.execute(
+                func=partial(
+                    gripper["driver"].write_module_parameter,
+                    param=request.parameter,
+                    data=bytes_data,
+                )
+            ).result()
+        else:
+            response.success = gripper["driver"].write_module_parameter(
+                param=request.parameter, data=bytes_data
+            )
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 

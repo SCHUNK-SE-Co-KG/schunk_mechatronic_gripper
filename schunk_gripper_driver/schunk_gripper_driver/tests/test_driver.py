@@ -26,6 +26,9 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     StartJogging,
     StartJoggingGPE,
     ShowGripperSpecification,
+    LocateGripper,
+    Stop,
+    PrepareForShutdown,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -209,7 +212,7 @@ def test_driver_checks_if_grippers_need_synchronization(ros2: None):
 def test_driver_doesnt_synchronize_empty_serial_ports(ros2):
     driver = Driver("driver")
     assert driver.reset_grippers()
-    assert driver.add_gripper(host="192.168.0.2", port=8000)
+    assert driver.add_gripper(gripper_id="abc", host="192.168.0.2", port=8000)
 
     other = Gripper(
         {
@@ -218,7 +221,7 @@ def test_driver_doesnt_synchronize_empty_serial_ports(ros2):
             "serial_port": "",
             "device_id": 0,
             "driver": GripperDriver(),
-            "gripper_id": "",
+            "gripper_id": "other",
         }
     )
     driver.grippers.append(other)
@@ -401,7 +404,7 @@ def test_driver_runs_a_scheduler_for_concurrent_tasks(ros2: None):
     def scheduler_running() -> bool:
         return driver.scheduler.worker_thread.is_alive()
 
-    assert not scheduler_running()
+    assert scheduler_running()
     driver.on_configure(state=None)
     assert scheduler_running()
     driver.on_activate(state=None)
@@ -409,14 +412,21 @@ def test_driver_runs_a_scheduler_for_concurrent_tasks(ros2: None):
     driver.on_deactivate(state=None)
     assert scheduler_running()
     driver.on_cleanup(state=None)
+    assert scheduler_running()
+    driver.on_shutdown(state=None)
     assert not scheduler_running()
 
 
+@skip_without_gripper
 def test_driver_offers_adding_grippers(ros2: None):
     driver = Driver("driver")
     driver.grippers.clear()
     assert driver.add_gripper(
-        host="0.0.0.0", port=8000, serial_port="/dev/ttyUSB0", device_id=12
+        gripper_id="",
+        host="0.0.0.0",
+        port=8000,
+        serial_port="/dev/ttyUSB0",
+        device_id=12,
     )
     assert len(driver.grippers) == 1
 
@@ -434,33 +444,110 @@ def test_driver_offers_adding_grippers(ros2: None):
 
     # Valid arguments
     driver.grippers.clear()
-    assert driver.add_gripper(host="0.0.0.0", port=8000)
-    assert driver.add_gripper(serial_port="/dev/ttyUSB0", device_id=12)
+    assert driver.add_gripper(gripper_id="abc", host="0.0.0.0", port=8000)
+    driver.grippers[-1]["gripper_id"] == "abc"
+
+    assert driver.add_gripper(
+        gripper_id="xyz", serial_port="/dev/ttyUSB0", device_id=12
+    )
+    driver.grippers[-1]["gripper_id"] == "xyz"
+
     assert len(driver.grippers) == 2
+
+
+def test_driver_checks_connection_when_adding_grippers(ros2: None):
+    driver = Driver("driver")
+
+    # Check the connection if no gripper id is given
+    assert not driver.add_gripper(host="0.0.0.0", port=1234)
+    assert not driver.add_gripper(serial_port="invalid", device_id=12)
+
+    # Don't check if gripper id has some value
+    driver.reset_grippers()
+    assert driver.add_gripper(gripper_id="abc", host="0.0.0.0", port=1234)
+    assert driver.add_gripper(gripper_id="xyz", serial_port="invalid", device_id=12)
+
+
+def test_driver_offers_getting_unique_gripper_ids(ros2: None):
+    driver = Driver("driver")
+
+    setups = [
+        {"known": ["a_1", "b_1", "c_1"], "new": "a", "expected": "a_2"},
+        {"known": ["a_1"], "new": "b", "expected": "b_1"},
+        {"known": ["a_2"], "new": "a", "expected": "a_1"},
+    ]
+    for setup in setups:
+
+        # Fill the driver's list of known grippers
+        driver.reset_grippers()
+        for gripper_id in setup["known"]:
+            gripper = Gripper(
+                {
+                    "host": "",
+                    "port": 0,
+                    "serial_port": "",
+                    "device_id": 0,
+                    "driver": GripperDriver(),
+                    "gripper_id": gripper_id,
+                }
+            )
+            driver.grippers.append(gripper)
+
+        # Check
+        unique_id = driver.get_unique_id(gripper=setup["new"])  # type: ignore
+        assert unique_id == setup["expected"]
+
+
+@skip_without_gripper
+def test_driver_assigns_unique_ids_when_adding_grippers(ros2: None):
+    driver = Driver("driver")
+    driver.reset_grippers()
+
+    assert driver.add_gripper(host="0.0.0.0", port=8000)
+    gripper_id = driver.grippers[-1]["gripper_id"]
+    assert gripper_id.split("_")[-1].isdigit()
+
+    assert driver.add_gripper(serial_port="/dev/ttyUSB0", device_id=12)
+    gripper_id = driver.grippers[-1]["gripper_id"]
+    assert gripper_id.split("_")[-1].isdigit()
 
 
 def test_driver_rejects_adding_duplicate_grippers(ros2: None):
     driver = Driver("driver")
     driver.grippers.clear()
     unique_setups = [
-        {"host": "1", "port": 1},
-        {"host": "2", "port": 2},
+        {"gripper_id": "a", "host": "1", "port": 1},
+        {"gripper_id": "b", "host": "2", "port": 2},
         # TCP/IP takes preference when both are given
-        {"host": "2", "port": 3, "serial_port": "/", "device_id": 12},
-        {"host": "2", "port": 4, "serial_port": "/", "device_id": 12},
-        {"serial_port": "/dev/1", "device_id": 12},
-        {"serial_port": "/dev/2", "device_id": 13},
+        {
+            "gripper_id": "c",
+            "host": "2",
+            "port": 3,
+            "serial_port": "/",
+            "device_id": 12,
+        },
+        {
+            "gripper_id": "d",
+            "host": "2",
+            "port": 4,
+            "serial_port": "/",
+            "device_id": 12,
+        },
+        {"gripper_id": "e", "serial_port": "/dev/1", "device_id": 12},
+        {"gripper_id": "f", "serial_port": "/dev/2", "device_id": 13},
     ]
     for setup in unique_setups:
         assert driver.add_gripper(**setup)  # type: ignore [arg-type]
 
     driver.grippers.clear()
-    driver.add_gripper(host="1", port=1, serial_port="/dev/1", device_id=12)
+    driver.add_gripper(
+        gripper_id="unique", host="1", port=1, serial_port="/dev/1", device_id=12
+    )
     overlapping_setups = [
-        {"host": "1", "port": 1},
-        {"host": "1", "port": 1, "serial_port": "/dev/1"},
-        {"port": 1, "serial_port": "/dev/1", "device_id": 12},
-        {"serial_port": "/dev/1", "device_id": 12},
+        {"gripper_id": "a", "host": "1", "port": 1},
+        {"gripper_id": "b", "host": "1", "port": 1, "serial_port": "/dev/1"},
+        {"gripper_id": "c", "port": 1, "serial_port": "/dev/1", "device_id": 12},
+        {"gripper_id": "d", "serial_port": "/dev/1", "device_id": 12},
     ]
     for setup in overlapping_setups:
         assert not driver.add_gripper(**setup)  # type: ignore [arg-type]
@@ -478,7 +565,7 @@ def test_driver_offers_resetting_grippers(ros2: None):
 
 
 @skip_without_gripper
-def test_driver_schedules_concurrent_tasks(ros2: None):
+def test_driver_schedules_concurrent_module_updates(ros2: None):
     driver = Driver("driver")
     driver.reset_grippers()
 
@@ -501,15 +588,12 @@ def test_driver_schedules_concurrent_tasks(ros2: None):
     driver._add_gripper_cb(request=request_2, response=response)
     assert response.success
 
-    # Grippers with a concurrent serial port can't have an update cycle.
+    # Grippers with a concurrent serial port still have an update cycle.
     driver.on_configure(state=None)
     assert len(driver.grippers) == 2
-    assert not driver.grippers[0]["driver"].polling_thread.is_alive()
-    assert not driver.grippers[1]["driver"].polling_thread.is_alive()
+    assert driver.grippers[0]["driver"].polling_thread.is_alive()
+    assert driver.grippers[1]["driver"].polling_thread.is_alive()
 
-    driver.on_activate(state=None)
-
-    driver.on_deactivate(state=None)
     driver.on_cleanup(state=None)
 
 
@@ -521,12 +605,19 @@ def test_driver_shows_configuration(ros2: None):
 
     # Add some grippers and check the information
     gripper1 = {
+        "gripper_id": "xyz",
         "host": "abc",
         "port": 1234,
         "serial_port": "$asd/123/?",
         "device_id": 55,
     }
-    gripper2 = {"host": "xyz", "port": 42, "serial_port": "/dev/0", "device_id": 66}
+    gripper2 = {
+        "gripper_id": "abc",
+        "host": "xyz",
+        "port": 42,
+        "serial_port": "/dev/0",
+        "device_id": 66,
+    }
     assert driver.add_gripper(**gripper1)  # type: ignore [arg-type]
     assert driver.add_gripper(**gripper2)  # type: ignore [arg-type]
     config = driver.show_configuration()
@@ -629,3 +720,92 @@ def test_driver_uses_a_dedicated_thread_for_connection_status(ros2):
 
     driver.on_shutdown(state=None)
     assert not driver.connection_status_thread.is_alive()
+
+
+@skip_without_gripper
+def test_driver_offers_callback_for_brake_test(ros2: None):
+    driver = Driver("driver")
+    driver.on_configure(state=None)
+    driver.on_activate(state=None)
+
+    req = Trigger.Request()
+    res = Trigger.Response()
+    for idx, _ in enumerate(driver.grippers):
+        gripper = driver.grippers[idx]
+        gripper_id = gripper["gripper_id"]
+        assert driver._brake_test_cb(
+            request=req, response=res, gripper=gripper
+        ), f"gripper_id: {gripper_id}"
+        assert not res.success
+
+    driver.on_deactivate(state=None)
+    driver.on_cleanup(state=None)
+
+
+@skip_without_gripper
+def test_driver_offers_callback_for_locating_grippers(ros2: None):
+    driver = Driver("driver")
+
+    # Modbus
+    req = LocateGripper.Request()
+    res = LocateGripper.Response()
+    req.gripper.serial_port = "/dev/ttyUSB0"
+    req.gripper.device_id = 12
+    result = driver._locate_gripper_cb(request=req, response=res)
+    assert result.success
+
+    # TCP/IP
+    req = LocateGripper.Request()
+    res = LocateGripper.Response()
+    req.gripper.host = "0.0.0.0"
+    req.gripper.port = 8000
+    result = driver._locate_gripper_cb(request=req, response=res)
+    assert result.success
+
+    # Non-existent gripper
+    req = LocateGripper.Request()
+    res = LocateGripper.Response()
+    req.gripper.host = "1.2.3.4"
+    req.gripper.port = 1234
+    result = driver._locate_gripper_cb(request=req, response=res)
+    assert not result.success
+
+
+@skip_without_gripper
+def test_driver_offers_callback_for_stop(ros2: None):
+    driver = Driver("driver")
+    driver.on_configure(state=None)
+    driver.on_activate(state=None)
+
+    req = Stop.Request()
+    res = Stop.Response()
+    for idx, _ in enumerate(driver.grippers):
+        gripper = driver.grippers[idx]
+        gripper_id = gripper["gripper_id"]
+        assert driver._stop_cb(
+            request=req, response=res, gripper=gripper
+        ), f"gripper_id: {gripper_id}"
+        assert res.success
+
+    driver.on_deactivate(state=None)
+    driver.on_cleanup(state=None)
+
+
+@skip_without_gripper
+def test_driver_offers_callback_for_prepare_for_shutdown(ros2: None):
+    driver = Driver("driver")
+    driver.on_configure(state=None)
+    driver.on_activate(state=None)
+
+    req = PrepareForShutdown.Request()
+    res = PrepareForShutdown.Response()
+    for idx, _ in enumerate(driver.grippers):
+        gripper = driver.grippers[idx]
+        gripper_id = gripper["gripper_id"]
+        assert driver._prepare_for_shutdown_cb(
+            request=req, response=res, gripper=gripper
+        ), f"gripper_id: {gripper_id}"
+        assert res.success
+
+    driver.on_deactivate(state=None)
+    driver.on_cleanup(state=None)

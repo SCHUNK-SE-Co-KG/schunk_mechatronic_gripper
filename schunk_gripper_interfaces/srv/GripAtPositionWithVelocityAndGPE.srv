@@ -7,11 +7,21 @@ int16 force   # Grip force in percent
               # EGU 50, 60, 80, EZU 30, 35, 40: 50 ≤ gripping force [%] ≤ 200
               # EGU 70: 50 ≤ gripping force [%] ≤ 150
 
+bool use_gpe  # Whether to activate grip force and position maintenance.
+              # Defaults to False.
+
 bool outward  # Whether to grip the workpiece from the inside
               # (Fingers are moving outwards).
               # Defaults to False.
 
-float32 position  # Expect to grip a workpiece at a specific position in [m]
+float32 velocity # Speed for the gripping motion in [m/s].
+                 # If set to 0, the speed corresponds to the grip force
+                 # At 100% force the speed is set to the value of
+                 # parameter 0x0650 (max_grp_vel)
+                 # At 50% force the speed is set to the value of
+                 # parameter 0x0628 (min_vel)
+
+float32 position  # Expect to grip a workpiece (wp) at a specific position in [m]
                   # If an unexpected workpiece was gripped or
                   # the gripping position was exceeded the command is terminated
                   # and the gripper will either set bit 17 (wrong wp gripped) or

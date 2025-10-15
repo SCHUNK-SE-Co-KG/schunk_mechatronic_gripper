@@ -20,9 +20,6 @@ def test_grip_fails_with_invalid_arguments():
         for force in invalid_forces:
             assert not driver.grip(force)
 
-        if driver.get_variant() == "EGK":
-            assert not driver.grip(force=170)
-
         driver.disconnect()
 
 
@@ -35,9 +32,9 @@ def test_grip_works_with_valid_arguments():
     driver.connect(host="0.0.0.0", port=8000)
     driver.acknowledge()
     combinations = [
-        {"force": 75, "outward": True},
-        {"force": 55, "outward": False},
-        {"force": 99, "outward": True},
+        {"force": 175, "outward": True},
+        {"force": 155, "outward": False},
+        {"force": 199, "outward": True},
     ]
     for args in combinations:
         assert driver.grip(**args)
@@ -66,15 +63,6 @@ def test_grip_moves_as_expected_with_the_outward_argument():
 
 
 @skip_without_gripper
-def test_grip_fails_when_no_workpiece_detected():
-    driver = Driver()
-    driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
-    driver.acknowledge()
-    assert not driver.grip(force=75, outward=True)
-    driver.disconnect()
-
-
-@skip_without_gripper
 def test_grip_at_position_fails_with_invalid_arguments():
     driver = Driver()
 
@@ -92,7 +80,7 @@ def test_grip_at_position_fails_with_invalid_arguments():
 
 
 @skip_without_gripper
-def test_soft_grip_fails_with_invalid_arguments():
+def test_grip_with_velocity_fails_with_invalid_arguments():
     driver = Driver()
     driver.connect(host="0.0.0.0", port=8000, device_id=12)
     driver.acknowledge()
@@ -108,7 +96,7 @@ def test_soft_grip_fails_with_invalid_arguments():
 
 
 @skip_without_gripper
-def test_soft_grip_at_position_fails_with_invalid_arguments():
+def test_grip_at_position_with_velocity_fails_with_invalid_arguments():
     driver = Driver()
     driver.connect(host="0.0.0.0", port=8000, device_id=12)
     driver.acknowledge()
@@ -121,35 +109,5 @@ def test_soft_grip_at_position_fails_with_invalid_arguments():
         for vel in invalid_velocities:
             for force in forces:
                 assert not driver.grip(force=force, position=pos, velocity=vel)
-
-    driver.disconnect()
-
-
-@skip_without_gripper
-def test_strong_grip_fails_with_invalid_arguments():
-    driver = Driver()
-    driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
-    driver.acknowledge()
-
-    forces = [-50, 0.0, 25.0, 201, 1e9]
-
-    for force in forces:
-        assert not driver.grip(force=force)
-
-    driver.disconnect()
-
-
-@skip_without_gripper
-def test_strong_grip_at_position_fails_with_invalid_arguments():
-    driver = Driver()
-    driver.connect(serial_port="/dev/ttyUSB0", device_id=12)
-    driver.acknowledge()
-
-    invalid_forces = [-50, 0.0, 25.0, 201, 1e9]
-    invalid_positions = [-1000.0, 1e6, 3.5]
-
-    for force in invalid_forces:
-        for pos in invalid_positions:
-            assert not driver.grip(force=force, position=pos)
 
     driver.disconnect()

@@ -18,15 +18,13 @@ from schunk_gripper_driver.driver import Driver
 from schunk_gripper_library.utility import skip_without_gripper
 from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     Grip,
-    GripGPE,
+    GripWithGPE,
     GripAtPosition,
-    GripAtPositionGPE,
-    SoftGrip,
-    SoftGripGPE,
-    SoftGripAtPosition,
-    SoftGripAtPositionGPE,
-    StrongGripGPE,
-    StrongGripAtPositionGPE,
+    GripAtPositionWithGPE,
+    GripWithVelocity,
+    GripWithVelocityAndGPE,
+    GripAtPositionWithVelocity,
+    GripAtPositionWithVelocityAndGPE,
     MoveToAbsolutePosition,
     MoveToAbsolutePositionGPE,
     MoveToRelativePosition,
@@ -42,15 +40,13 @@ def test_grip_callback_handles_all_gpe_variants(ros2):
 
     service_types = [
         Grip,
-        GripGPE,
+        GripWithGPE,
         GripAtPosition,
-        GripAtPositionGPE,
-        SoftGrip,
-        SoftGripGPE,
-        SoftGripAtPosition,
-        SoftGripAtPositionGPE,
-        StrongGripGPE,
-        StrongGripAtPositionGPE,
+        GripAtPositionWithGPE,
+        GripWithVelocity,
+        GripWithVelocityAndGPE,
+        GripAtPositionWithVelocity,
+        GripAtPositionWithVelocityAndGPE,
     ]
     for gripper in driver.grippers:
         for service_type in service_types:
@@ -71,48 +67,32 @@ def test_driver_offers_gpe_specific_services(ros2):
 
     module_expectations = {
         "EGU_50_M_B": {
-            "/grip": GripGPE,
-            "/grip_at_position": GripAtPositionGPE,
-            "/soft_grip": None,
-            "/soft_grip_at_position": None,
-            "/strong_grip": StrongGripGPE,
-            "/strong_grip_at_position": StrongGripAtPositionGPE,
+            "/grip": GripWithGPE,
+            "/grip_at_position": GripAtPositionWithGPE,
             "/move_to_absolute_position": MoveToAbsolutePositionGPE,
             "/move_to_relative_position": MoveToRelativePositionGPE,
         },
         "EGU_50_N_B": {
             "/grip": Grip,
             "/grip_at_position": GripAtPosition,
-            "/soft_grip": None,
-            "/soft_grip_at_position": None,
-            "/strong_grip": None,
-            "/strong_grip_at_position": None,
             "/move_to_absolute_position": MoveToAbsolutePosition,
             "/move_to_relative_position": MoveToRelativePosition,
         },
         "EGK_25_M_B": {
-            "/grip": GripGPE,
-            "/grip_at_position": GripAtPositionGPE,
-            "/soft_grip": SoftGripGPE,
-            "/soft_grip_at_position": SoftGripAtPositionGPE,
-            "/strong_grip": None,
-            "/strong_grip_at_position": None,
+            "/grip": GripWithVelocityAndGPE,
+            "/grip_at_position": GripAtPositionWithVelocityAndGPE,
             "/move_to_absolute_position": MoveToAbsolutePositionGPE,
             "/move_to_relative_position": MoveToRelativePositionGPE,
         },
         "EGK_25_N_B": {
-            "/grip": Grip,
-            "/grip_at_position": GripAtPosition,
-            "/soft_grip": SoftGrip,
-            "/soft_grip_at_position": SoftGripAtPosition,
-            "/strong_grip": None,
-            "/strong_grip_at_position": None,
+            "/grip": GripWithVelocity,
+            "/grip_at_position": GripAtPositionWithVelocity,
             "/move_to_absolute_position": MoveToAbsolutePosition,
             "/move_to_relative_position": MoveToRelativePosition,
         },
     }
     for module, services in module_expectations.items():
-        driver.grippers[0]["driver"].module = module
+        driver.grippers[0]["driver"].module_type = module
         driver.on_activate(state=None)
 
         for srv_suffix, expected_type in services.items():

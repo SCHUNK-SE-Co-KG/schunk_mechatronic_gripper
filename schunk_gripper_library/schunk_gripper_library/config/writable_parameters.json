@@ -1,3 +1,19 @@
 {
-    "0x0048": {"name": "plc_output", "registers": 8, "type": "uint32 int32 int32 uint32"}
+    "0x0048": {"name": "plc_output", "registers": 8, "type": "struct(uint32 int32 int32 uint32)"},
+    "0x0128": {"name": "sys_msg_req", "registers": 1, "type": "uint16"},
+    "0x0380": {"name": "grp_prehold_time", "registers": 1, "type": "uint16"},
+    "0x0528": {"name": "wp_lost_dst", "registers": 2, "type": "float"},
+    "0x0540": {"name": "wp_release_delta", "registers": 2, "type": "float"},
+    "0x0580": {"name": "grp_pos_margin", "registers": 2, "type": "float"},
+    "0x05A8": {"name": "grp_prepos_delta", "registers": 2, "type": "float"},
+    "0x0600": {"name": "min_pos", "registers": 2, "type": "float"},
+    "0x0608": {"name": "max_pos", "registers": 2, "type": "float"},
+    "0x0610": {"name": "zero_pos_ofs", "registers": 2, "type": "float"},
+    "0x0880": {"name": "min_wrn_mot_volt", "registers": 2, "type": "float"},
+    "0x0888": {"name": "max_wrn_mot_volt", "registers": 2, "type": "float"},
+    "0x0890": {"name": "min_wrn_lgc_volt", "registers": 2, "type": "float"},
+    "0x0898": {"name": "max_wrn_lgc_volt", "registers": 2, "type": "float"},
+    "0x11A0": {"name": "baudrate", "registers": 2, "type": "uint32"},
+    "0x11A8": {"name": "slave_id", "registers": 1, "type": "uint8"},
+    "0x1330": {"name": "enable_softreset", "registers": 1, "type": "bool"}
 }
