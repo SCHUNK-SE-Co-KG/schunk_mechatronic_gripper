@@ -431,13 +431,21 @@ class Driver(object):
         estimated_duration_sec = self.estimate_duration(
             position_abs=position, velocity=velocity, force=force, outward=outward
         )
-        duration_sec = estimated_duration_sec + epsilon_sec
+        # retrieve the prehold time in case the gripper is configured for pre-gripping
+        prehold_time_sec = 0.0
+        prehold_time_data = self.read_module_parameter("0x0380")
+        values, value_type = self.decode_module_parameter(prehold_time_data, "0x0380")
+        if value_type == "uint16" and len(values) == 1:
+            prehold_time_sec = values[0] / 1000.0  # ms -> s
+
+        duration_sec = estimated_duration_sec + prehold_time_sec + epsilon_sec
 
         # wait for the command to complete or an error to occur
         bits: list[dict[str, int]] = []
         bits.append({"4": 1, "12": 1})  # command processed and workpiece gripped
         bits.append({"4": 0, "11": 1})  # no workpiece detected
         bits.append({"4": 0, "17": 1})  # wrong workpiece gripped
+        bits.append({"4": 0, "16": 1})  # workpiece lost (relevant for pre-gripping)
         bits.append({"7": 1})  # error state
         matched_pattern = self.wait_for_any_status(bits=bits, timeout_sec=duration_sec)
 
@@ -762,6 +770,17 @@ class Driver(object):
         return True
 
     def read_module_parameter(self, param: str) -> bytearray:
+        """
+        Reads the specified parameter from the module.
+
+        Args:
+            param (str): The parameter address in hex format, e.g. "0x0040".
+
+        Returns:
+            bytearray: The value of the specified parameter.
+                       Use `decode_module_parameter()` to convert the
+                       bytearray into the correct type.
+        """
         result = bytearray()
         if param not in self.readable_parameters:
             return result
@@ -875,6 +894,18 @@ class Driver(object):
     def decode_module_parameter(
         self, data: bytearray, param: str
     ) -> tuple[tuple[Any, ...], str]:
+        """
+        Converts the given bytearray into the correct type based on the parameter.
+
+        Args:
+            data (bytearray): The bytearray data to decode.
+            param (str): The parameter identifier to determine
+                         the decoding (e.g., "0x3080").
+
+        Returns:
+            tuple[tuple[Any, ...], str]: A tuple containing the decoded values and
+                                         a status or description string.
+        """
         error: tuple[tuple[Any, ...], str] = (tuple(), "")
         if not self.connected:
             return error
