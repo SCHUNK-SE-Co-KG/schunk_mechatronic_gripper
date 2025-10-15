@@ -945,9 +945,9 @@ class Driver(object):
                 or an empty dictionary if none matched within the timeout.
         """
         if not timeout_sec > 0.0:
-            return {}
+            raise ValueError("Invalid timeout value (must be > 0.0 sec)")
         if not bits:
-            return {}
+            raise ValueError("Invalid bits list (must not be empty)")
 
         deadline_time = time.time() + timeout_sec
         while time.time() < deadline_time:
