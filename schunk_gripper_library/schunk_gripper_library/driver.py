@@ -434,7 +434,7 @@ class Driver(object):
         # retrieve the prehold time in case the gripper is configured for pre-gripping
         prehold_time_sec = 0.0
         prehold_time_data = self.read_module_parameter("0x0380")
-        values, value_type = self.decode_module_parameter(prehold_time_data, "0x3080")
+        values, value_type = self.decode_module_parameter(prehold_time_data, "0x0380")
         if value_type == "uint16" and len(values) == 1:
             prehold_time_sec = values[0] / 1000.0  # ms -> s
 
