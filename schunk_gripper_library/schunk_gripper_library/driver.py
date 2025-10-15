@@ -497,29 +497,24 @@ class Driver(object):
         # a release has failed if either an error occured or the wait timed out
         return matched_pattern not in [{}, {"7": 1}]
 
-    # def release_for_manual_movement(self, scheduler: Scheduler | None = None) -> bool:
-    #     if not self.connected:
-    #         return False
+    def release_for_manual_movement(self, scheduler: Scheduler | None = None) -> bool:
+        if not self.connected:
+            return False
 
-    #     def start() -> bool:
-    #         self.clear_plc_output()
-    #         self.send_plc_output()
-    #         self.receive_plc_input()
-    #         cmd_toggle_before = self.get_status_bit(bit=5)
-    #         self.set_control_bit(bit=5, value=True)
-    #         self.send_plc_output()
-    #         desired_bits = {"5": cmd_toggle_before ^ 1}
-    #         return self.wait_for_status(bits=desired_bits)
+        def do() -> bool:
+            self.clear_plc_output()
+            self.send_plc_output()
+            self.receive_plc_input()
+            cmd_toggle_before = self.get_status_bit(bit=5)
+            self.set_control_bit(bit=5, value=True)
+            self.send_plc_output()
+            desired_bits = {"5": cmd_toggle_before ^ 1, "8": 1}
+            return self.wait_for_status(bits=desired_bits)
 
-    #     # send the command
-    #     if scheduler:
-    #         if not scheduler.execute(func=partial(start)).result():
-    #             return False
-    #     else:
-    #         if not start():
-    #             return False
-
-    #     return True
+        if scheduler:
+            return scheduler.execute(func=partial(do)).result()
+        else:
+            return do()
 
     def show_specification(self) -> dict[str, float | str]:
         if not self.connected:

@@ -1151,13 +1151,11 @@ class Driver(Node):
     ):
         self.get_logger().debug("---> Release for manual movement")
         if self.needs_synchronize(gripper):
-            pass
-            # response.success = gripper["driver"].release_for_manual_movement(
-            #     scheduler=self.scheduler
-            # )
+            response.success = gripper["driver"].release_for_manual_movement(
+                scheduler=self.scheduler
+            )
         else:
-            pass
-            # response.success = gripper["driver"].release_for_manual_movement()
+            response.success = gripper["driver"].release_for_manual_movement()
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
