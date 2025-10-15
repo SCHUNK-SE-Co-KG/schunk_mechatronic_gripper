@@ -1,5 +1,5 @@
 import struct
-from threading import Lock
+from threading import Lock, RLock
 from pymodbus.client import ModbusSerialClient
 from pymodbus.pdu import ModbusPDU
 import re
@@ -108,7 +108,7 @@ class Driver(object):
 
         self.plc_input_buffer: bytearray = bytearray(bytes.fromhex("00" * 16))
         self.plc_output_buffer: bytearray = bytearray(bytes.fromhex("00" * 16))
-        self.input_buffer_lock: Lock = Lock()
+        self.input_buffer_lock: RLock = RLock()
         self.output_buffer_lock: Lock = Lock()
 
         self.mb_client: NonExclusiveSerialClient | None = None
@@ -348,25 +348,29 @@ class Driver(object):
             desired_bits = {"5": cmd_toggle_before ^ 1, "3": 0}
             return self.wait_for_status(bits=desired_bits, timeout_sec=0.1)
 
-        def check():
-            desired_bits = {"13": 1, "4": 1}
-            return self.wait_for_status(bits=desired_bits)
-
-        duration_sec = self.estimate_duration(
-            position_abs=position, is_absolute=is_absolute, velocity=velocity
-        )
+        # send the move command
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
                 return False
-            if self.error_in(duration_sec):
-                return False
-            return scheduler.execute(func=partial(check)).result()
         else:
             if not start():
                 return False
-            if self.error_in(duration_sec):
-                return False
-            return check()
+
+        # estimate how long the move will take
+        epsilon_sec = 0.5  # additional time to account for delays
+        estimated_duration_sec = self.estimate_duration(
+            position_abs=position, is_absolute=is_absolute, velocity=velocity
+        )
+        duration_sec = estimated_duration_sec + epsilon_sec
+
+        # wait for the command to complete or an error to occur
+        bits: list[dict[str, int]] = []
+        bits.append({"4": 1, "13": 1})  # command processed and position reached
+        bits.append({"7": 1})  # error state
+        matched_pattern = self.wait_for_any_status(bits=bits, timeout_sec=duration_sec)
+
+        # a move has failed if either an error occured or the wait timed out
+        return matched_pattern not in [{}, {"7": 1}]
 
     def grip(
         self,
@@ -414,25 +418,31 @@ class Driver(object):
             desired_bits = {"5": cmd_toggle_before ^ 1, "3": 0}
             return self.wait_for_status(bits=desired_bits, timeout_sec=0.1)
 
-        def check() -> bool:
-            desired_bits = {"4": 1, "12": 1}
-            return self.wait_for_status(bits=desired_bits)
-
-        duration_sec = self.estimate_duration(
-            position_abs=position, velocity=velocity, force=force, outward=outward
-        )
+        # send the grip command
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
                 return False
-            if self.error_in(duration_sec):
-                return False
-            return scheduler.execute(func=partial(check)).result()
         else:
             if not start():
                 return False
-            if self.error_in(duration_sec):
-                return False
-            return check()
+
+        # estimate how long the grip will take
+        epsilon_sec = 0.5  # additional time to account for delays
+        estimated_duration_sec = self.estimate_duration(
+            position_abs=position, velocity=velocity, force=force, outward=outward
+        )
+        duration_sec = estimated_duration_sec + epsilon_sec
+
+        # wait for the command to complete or an error to occur
+        bits: list[dict[str, int]] = []
+        bits.append({"4": 1, "12": 1})  # command processed and workpiece gripped
+        bits.append({"4": 0, "11": 1})  # no workpiece detected
+        bits.append({"4": 0, "17": 1})  # wrong workpiece gripped
+        bits.append({"7": 1})  # error state
+        matched_pattern = self.wait_for_any_status(bits=bits, timeout_sec=duration_sec)
+
+        # a grip has failed if either an error occured or the wait timed out
+        return matched_pattern not in [{}, {"7": 1}]
 
     def release(
         self, use_gpe: bool = False, scheduler: Scheduler | None = None
@@ -457,26 +467,27 @@ class Driver(object):
             }
             return self.wait_for_status(bits=desired_bits)
 
-        def check() -> bool:
-            desired_bits = {
-                "4": 1,
-                "13": 1,
-            }
-            return self.wait_for_status(bits=desired_bits)
-
-        duration_sec = self.estimate_duration(release=True)
+        # send the release command
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
                 return False
-            if self.error_in(duration_sec):
-                return False
-            return scheduler.execute(func=partial(check)).result()
         else:
             if not start():
                 return False
-            if self.error_in(duration_sec):
-                return False
-            return check()
+
+        # estimate how long the release will take
+        epsilon_sec = 0.5  # additional time to account for delays
+        estimated_duration_sec = self.estimate_duration(release=True)
+        duration_sec = estimated_duration_sec + epsilon_sec
+
+        # wait for the command to complete or an error to occur
+        bits: list[dict[str, int]] = []
+        bits.append({"4": 1, "13": 1})  # command processed and position reached
+        bits.append({"7": 1})  # error state
+        matched_pattern = self.wait_for_any_status(bits=bits, timeout_sec=duration_sec)
+
+        # a release has failed if either an error occured or the wait timed out
+        return matched_pattern not in [{}, {"7": 1}]
 
     def show_specification(self) -> dict[str, float | str]:
         if not self.connected:
@@ -546,7 +557,8 @@ class Driver(object):
             if isinstance(velocity, int) and velocity > 0:
                 return abs(still_to_go) / velocity
             if isinstance(force, int) and force > 0:
-                grip_vel = (force / 100) * self.module_parameters["max_grp_vel"]
+                ratio = min(1.0, (force / 100))
+                grip_vel = ratio * self.module_parameters["max_grp_vel"]
                 return abs(still_to_go) / grip_vel
             return 0.0
 
@@ -561,7 +573,7 @@ class Driver(object):
                 )
             if isinstance(velocity, int) and velocity > 0:
                 return abs(still_to_go) / velocity
-            ratio = force / 100
+            ratio = min(1.0, force / 100)
             return abs(still_to_go) / (ratio * self.module_parameters["max_grp_vel"])
         return 0.0
 
@@ -917,22 +929,40 @@ class Driver(object):
 
         return (values, value_type)
 
-    def wait_for_status(
-        self, bits: dict[str, int] = {}, timeout_sec: float = 1.0
-    ) -> bool:
+    def wait_for_status(self, bits: dict[str, int], timeout_sec: float = 1.0) -> bool:
+        return bool(self.wait_for_any_status(bits=[bits], timeout_sec=timeout_sec))
+
+    def wait_for_any_status(
+        self, bits: list[dict[str, int]], timeout_sec: float
+    ) -> dict[str, int]:
+        """Wait for any of the specified status bits to reach the desired value.
+
+        Keyword arguments:
+        bits -- a list of patterns containing the bit numbers and their expected values
+        timeout_sec -- the maximum time to wait for the status bits to change
+
+        Return: Returns the first matching bit pattern found,
+                or an empty dictionary if none matched within the timeout.
+        """
         if not timeout_sec > 0.0:
-            return False
+            raise ValueError("Invalid timeout value (must be > 0.0 sec)")
         if not bits:
-            return False
-        max_duration = time.time() + timeout_sec
-        while not all(
-            [self.get_status_bit(int(bit)) == value for bit, value in bits.items()]
-        ):
-            time.sleep(0.001)
-            self.receive_plc_input()
-            if time.time() > max_duration:
-                return False
-        return True
+            raise ValueError("Invalid bits list (must not be empty)")
+
+        deadline_time = time.time() + timeout_sec
+        while time.time() < deadline_time:
+            with self.input_buffer_lock:
+                for bit_pattern in bits:
+                    if all(
+                        [
+                            self.get_status_bit(int(bit)) == value
+                            for bit, value in bit_pattern.items()
+                        ]
+                    ):
+                        return bit_pattern
+            time.sleep(self.update_cycle)
+
+        return {}
 
     def error_in(self, duration_sec: float) -> bool:
         if not isinstance(duration_sec, float):
