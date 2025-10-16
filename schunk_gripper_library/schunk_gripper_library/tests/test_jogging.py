@@ -103,7 +103,7 @@ def test_driver_doesnt_start_jogging_with_warnings():
     full_speed = driver.module_parameters["max_vel"]
     assert driver.move_to_position(position=almost_open, velocity=full_speed)
     assert driver.start_jogging(velocity=velocity)
-    time.sleep(1.0)
+    time.sleep(2.0)
     assert not driver.start_jogging(
         velocity=velocity
     ), f"diagnostics: {driver.get_status_diagnostics()}"

@@ -28,7 +28,6 @@ from schunk_gripper_interfaces.srv import (  # type: ignore [attr-defined]
     ShowGripperSpecification,
     LocateGripper,
     Stop,
-    PrepareForShutdown,
 )
 from schunk_gripper_interfaces.msg import (  # type: ignore [attr-defined]
     Gripper as GripperConfig,
@@ -797,8 +796,8 @@ def test_driver_offers_callback_for_prepare_for_shutdown(ros2: None):
     driver.on_configure(state=None)
     driver.on_activate(state=None)
 
-    req = PrepareForShutdown.Request()
-    res = PrepareForShutdown.Response()
+    req = Trigger.Request()
+    res = Trigger.Response()
     for idx, _ in enumerate(driver.grippers):
         gripper = driver.grippers[idx]
         gripper_id = gripper["gripper_id"]
