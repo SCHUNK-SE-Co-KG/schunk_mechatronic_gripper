@@ -62,6 +62,7 @@ def test_driver_advertises_state_depending_services(lifecycle_interface):
         "write_parameter",
         "prepare_for_shutdown",
         "release_for_manual_movement",
+        "soft_reset",
     ]
     until_change_takes_effect = 0.1
 
@@ -197,24 +198,7 @@ def test_driver_implements_stop(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("check_stop_service")
-    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
-    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
-    assert add_client.wait_for_service(timeout_sec=2)
-    assert reset_client.wait_for_service(timeout_sec=2)
-
-    # Reset grippers
-    reset_req = Trigger.Request()
-    future = reset_client.call_async(reset_req)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    # Add TCP/IP gripper
-    add_req = AddGripper.Request()
-    add_req.gripper.host = "0.0.0.0"
-    add_req.gripper.port = 8000
-    future = add_client.call_async(add_req)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
+    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
 
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
@@ -268,24 +252,7 @@ def test_driver_implements_prepare_for_shutdown(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("check_prepare_for_shutdown_service")
-    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
-    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
-    assert add_client.wait_for_service(timeout_sec=2)
-    assert reset_client.wait_for_service(timeout_sec=2)
-
-    # Reset grippers
-    reset_req = Trigger.Request()
-    future = reset_client.call_async(reset_req)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    # Add TCP/IP gripper
-    add_req = AddGripper.Request()
-    add_req.gripper.host = "0.0.0.0"
-    add_req.gripper.port = 8000
-    future = add_client.call_async(add_req)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
+    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
 
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
@@ -313,28 +280,41 @@ def test_driver_implements_prepare_for_shutdown(lifecycle_interface):
 
 
 @skip_without_gripper
+def test_driver_implements_soft_reset(lifecycle_interface):
+    driver = lifecycle_interface
+
+    node = Node("check_soft_reset_service")
+    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
+
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    for gripper in driver.list_grippers():
+        service_name = f"/schunk/driver/{gripper}/soft_reset"
+        ServiceType = driver.get_service_type(service_name)
+        assert ServiceType is not None, f"{gripper}: soft_reset service not found"
+
+        sr_client = node.create_client(ServiceType, service_name)
+        assert sr_client.wait_for_service(
+            timeout_sec=5
+        ), f"{gripper}: soft_reset service unavailable"
+
+        sr_req = ServiceType.Request()
+        future = sr_client.call_async(sr_req)
+        rclpy.spin_until_future_complete(node, future)
+        assert future.result().success, f"{gripper}: {future.result().message}"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
+    node.destroy_node()
+
+
+@skip_without_gripper
 def test_driver_implements_move_to_absolute_position(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("check_move_to_absolute_position")
-    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
-    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
-    assert add_client.wait_for_service(timeout_sec=2)
-    assert reset_client.wait_for_service(timeout_sec=2)
-
-    # Reset grippers
-    reset_req = Trigger.Request()
-    future = reset_client.call_async(reset_req)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    # Add TCP/IP gripper
-    add_req = AddGripper.Request()
-    add_req.gripper.host = "0.0.0.0"
-    add_req.gripper.port = 8000
-    future = add_client.call_async(add_req)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
+    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
 
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
@@ -377,24 +357,7 @@ def test_driver_implements_move_to_relative_position(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("check_move_to_relative_position")
-    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
-    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
-    assert add_client.wait_for_service(timeout_sec=2)
-    assert reset_client.wait_for_service(timeout_sec=2)
-
-    # Reset grippers
-    reset_req = Trigger.Request()
-    future = reset_client.call_async(reset_req)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    # Add TCP/IP gripper
-    add_req = AddGripper.Request()
-    add_req.gripper.host = "0.0.0.0"
-    add_req.gripper.port = 8000
-    future = add_client.call_async(add_req)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
+    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
 
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
@@ -898,24 +861,7 @@ def test_driver_implements_brake_test(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("check_brake_test")
-    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
-    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
-    assert add_client.wait_for_service(timeout_sec=2)
-    assert reset_client.wait_for_service(timeout_sec=2)
-
-    # Reset grippers
-    reset_req = Trigger.Request()
-    future = reset_client.call_async(reset_req)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    # Add TCP/IP gripper
-    add_req = AddGripper.Request()
-    add_req.gripper.host = "0.0.0.0"
-    add_req.gripper.port = 8000
-    future = add_client.call_async(add_req)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
+    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
 
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
@@ -958,5 +904,26 @@ def test_driver_implements_locating_gripper(driver):
     req.gripper.serial_port = "/dev/ttyUSB0"
     req.gripper.device_id = 12
     future = client.call_async(req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+
+def setup_single_ethernet_gripper(node: Node, host: str, port: int):
+    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
+    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
+    assert add_client.wait_for_service(timeout_sec=1)
+    assert reset_client.wait_for_service(timeout_sec=1)
+
+    # Reset grippers
+    reset_req = Trigger.Request()
+    future = reset_client.call_async(reset_req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    # Add TCP/IP gripper
+    add_req = AddGripper.Request()
+    add_req.gripper.host = host
+    add_req.gripper.port = port
+    future = add_client.call_async(add_req)
     rclpy.spin_until_future_complete(node, future)
     assert future.result().success
