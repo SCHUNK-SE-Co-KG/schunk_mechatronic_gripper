@@ -198,7 +198,7 @@ def test_driver_implements_stop(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("check_stop_service")
-    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
+    setup_single_ethernet_dummy(node, "0.0.0.0", 8000)
 
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
@@ -252,7 +252,7 @@ def test_driver_implements_prepare_for_shutdown(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("check_prepare_for_shutdown_service")
-    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
+    setup_single_ethernet_dummy(node, "0.0.0.0", 8000)
 
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
@@ -284,7 +284,7 @@ def test_driver_implements_soft_reset(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("check_soft_reset_service")
-    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
+    setup_single_ethernet_dummy(node, "0.0.0.0", 8000)
 
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
@@ -314,7 +314,7 @@ def test_driver_implements_move_to_absolute_position(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("check_move_to_absolute_position")
-    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
+    setup_single_ethernet_dummy(node, "0.0.0.0", 8000)
 
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
@@ -357,7 +357,7 @@ def test_driver_implements_move_to_relative_position(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("check_move_to_relative_position")
-    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
+    setup_single_ethernet_dummy(node, "0.0.0.0", 8000)
 
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
@@ -790,7 +790,8 @@ def test_driver_implements_start_and_stop_jogging(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("start_jogging")
-    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
+    # we do not setup a single ethernet dummy here, because the dummy server
+    # does not support stopping jogging => Use the modbus simulator instead
 
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
@@ -844,7 +845,7 @@ def test_driver_implements_brake_test(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("check_brake_test")
-    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
+    setup_single_ethernet_dummy(node, "0.0.0.0", 8000)
 
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
@@ -891,7 +892,7 @@ def test_driver_implements_locating_gripper(driver):
     assert future.result().success
 
 
-def setup_single_ethernet_gripper(node: Node, host: str, port: int):
+def setup_single_ethernet_dummy(node: Node, host: str, port: int):
     add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
     reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
     assert add_client.wait_for_service(timeout_sec=2)
