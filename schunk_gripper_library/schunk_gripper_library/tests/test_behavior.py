@@ -244,11 +244,11 @@ def test_stop():
 
 
 @skip_without_gripper
-def test_prepare_for_shutdown():
+def test_prepare_for_shutdown_and_soft_reset():
     driver = Driver()
-    for host, port, serial_port in zip(
-        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
-    ):
+    # The modbus simulator does not simulate soft reset properly,
+    # so we run this test only with the web dummy.
+    for host, port, serial_port in zip(["0.0.0.0"], [8000], [None]):
         # Not connected
         assert not driver.prepare_for_shutdown()
 
@@ -257,8 +257,9 @@ def test_prepare_for_shutdown():
             host=host, port=port, serial_port=serial_port, device_id=12
         )
         assert driver.acknowledge()
-
         assert driver.prepare_for_shutdown()
+        assert driver.soft_reset()
+
         assert driver.disconnect()
 
 
