@@ -290,6 +290,30 @@ def test_release():
 
 
 @skip_without_gripper
+def test_release_for_manual_movement():
+    driver = Driver()
+    for host, port, serial_port in zip(
+        ["0.0.0.0", None], [8000, None], [None, "/dev/ttyUSB0"]
+    ):
+        assert driver.connect(
+            host=host, port=port, serial_port=serial_port, device_id=12
+        )
+        assert driver.acknowledge()
+
+        # this must fail, because release for manual movement is only allowed by
+        # the firmware if the gripper is in an error state
+        assert not driver.release_for_manual_movement()
+
+        # bring the gripper into an error state
+        driver.fast_stop()
+
+        # now the command shall succeed
+        assert driver.release_for_manual_movement()
+
+        assert driver.disconnect()
+
+
+@skip_without_gripper
 def test_brake_test():
     driver = Driver()
 

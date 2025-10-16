@@ -61,6 +61,7 @@ def test_driver_advertises_state_depending_services(lifecycle_interface):
         "read_parameter",
         "write_parameter",
         "prepare_for_shutdown",
+        "release_for_manual_movement",
     ]
     until_change_takes_effect = 0.1
 
@@ -504,6 +505,60 @@ def test_driver_implements_grip_and_release(lifecycle_interface):
     driver.change_state(Transition.TRANSITION_DEACTIVATE)
     driver.change_state(Transition.TRANSITION_CLEANUP)
     node.destroy_node()
+
+
+@skip_without_gripper
+def test_driver_implements_release_for_manual_movement(lifecycle_interface):
+    driver = lifecycle_interface
+
+    node = Node("check_release_for_manual_movement")
+    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
+    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
+    assert add_client.wait_for_service(timeout_sec=2)
+    assert reset_client.wait_for_service(timeout_sec=2)
+
+    # Reset grippers (drop default modbus gripper)
+    reset_req = Trigger.Request()
+    future = reset_client.call_async(reset_req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    add_req = AddGripper.Request()
+    add_req.gripper.host = "0.0.0.0"
+    add_req.gripper.port = 8000
+    future = add_client.call_async(add_req)
+    rclpy.spin_until_future_complete(node, future)
+    assert future.result().success
+
+    driver.change_state(Transition.TRANSITION_CONFIGURE)
+    driver.change_state(Transition.TRANSITION_ACTIVATE)
+
+    for gripper in driver.list_grippers():
+        client_release = node.create_client(
+            Trigger, f"/schunk/driver/{gripper}/release_for_manual_movement"
+        )
+        assert client_release.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
+        future = client_release.call_async(Trigger.Request())
+        # calling release_for_manual_movement is not allowed if the gripper is not
+        # in an error state, so the following service call should return false
+        rclpy.spin_until_future_complete(node, future, timeout_sec=2)
+        assert not future.result().success
+
+        # put the gripper in an error and try again
+        client_fast_stop = node.create_client(
+            Trigger, f"/schunk/driver/{gripper}/fast_stop"
+        )
+        assert client_fast_stop.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
+        future = client_fast_stop.call_async(Trigger.Request())
+        rclpy.spin_until_future_complete(node, future, timeout_sec=2)
+        assert future.result().success
+        # try release_for_manual_movement again, which should now succeed
+        future = client_release.call_async(Trigger.Request())
+        rclpy.spin_until_future_complete(node, future, timeout_sec=2)
+        assert future.result().success, f"gripper: {gripper}"
+
+    driver.change_state(Transition.TRANSITION_DEACTIVATE)
+    driver.change_state(Transition.TRANSITION_CLEANUP)
 
 
 @skip_without_gripper
