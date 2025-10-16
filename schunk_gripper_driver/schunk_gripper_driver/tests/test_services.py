@@ -790,35 +790,18 @@ def test_driver_implements_start_and_stop_jogging(lifecycle_interface):
     driver = lifecycle_interface
 
     node = Node("start_jogging")
-    add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
-    reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
-    assert add_client.wait_for_service(timeout_sec=2)
-    assert reset_client.wait_for_service(timeout_sec=2)
-
-    # Drop default modbus gripper because jogging is broken there
-    request = Trigger.Request()
-    future = reset_client.call_async(request)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
-
-    # Add TCP/IP gripper
-    request = AddGripper.Request()
-    request.gripper.host = "0.0.0.0"
-    request.gripper.port = 8000
-    future = add_client.call_async(request)
-    rclpy.spin_until_future_complete(node, future)
-    assert future.result().success
+    setup_single_ethernet_gripper(node, "0.0.0.0", 8000)
 
     driver.change_state(Transition.TRANSITION_CONFIGURE)
     driver.change_state(Transition.TRANSITION_ACTIVATE)
 
     # Get the gripper's services
     for gripper in driver.list_grippers():
-        StartJogging = driver.get_service_type(
+        StartJoggingType = driver.get_service_type(
             f"/schunk/driver/{gripper}/start_jogging"
         )
         start_jogging_client = node.create_client(
-            StartJogging,
+            StartJoggingType,
             f"/schunk/driver/{gripper}/start_jogging",
         )
         assert start_jogging_client.wait_for_service(
@@ -839,10 +822,10 @@ def test_driver_implements_start_and_stop_jogging(lifecycle_interface):
             {"velocity": 0.08, "use_gpe": True},
         ]
         for target in targets:
-
             # Start
-            request = StartJogging.Request()
-            request.use_gpe = target["use_gpe"]
+            request = StartJoggingType.Request()
+            if hasattr(request, "use_gpe"):
+                request.use_gpe = target["use_gpe"]
             future = start_jogging_client.call_async(request)
             rclpy.spin_until_future_complete(node, future)
             assert future.result().success, f"{future.result().message}, for {target}"
@@ -911,8 +894,8 @@ def test_driver_implements_locating_gripper(driver):
 def setup_single_ethernet_gripper(node: Node, host: str, port: int):
     add_client = node.create_client(AddGripper, "/schunk/driver/add_gripper")
     reset_client = node.create_client(Trigger, "/schunk/driver/reset_grippers")
-    assert add_client.wait_for_service(timeout_sec=1)
-    assert reset_client.wait_for_service(timeout_sec=1)
+    assert add_client.wait_for_service(timeout_sec=2)
+    assert reset_client.wait_for_service(timeout_sec=2)
 
     # Reset grippers
     reset_req = Trigger.Request()
