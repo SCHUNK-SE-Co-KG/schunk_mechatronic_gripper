@@ -18,9 +18,9 @@ float32 position  # Expect to grip a workpiece at a specific position in [m]
                   # bit 11 (no wp gripped) in the statusword.
 ---
 
-# Flags indicating the outcome of the grip action.
-# If the grip action failed, all flags below will be False.
-# If the grip action succeeded, exactly one of the flags below will be True.
+# Flags indicating the outcome of the grip operation.
+# If the grip operation failed, all flags below will be False.
+# If it succeeded, exactly one of the flags below will be True.
 bool workpiece_gripped
 bool no_workpiece_detected
 bool wrong_workpiece_gripped
