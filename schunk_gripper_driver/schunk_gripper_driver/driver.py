@@ -1143,6 +1143,7 @@ class Driver(Node):
             scheduler=scheduler,
         )
 
+        response.success = False
         if grip_result == gripper["driver"].GripResult.WORKPIECE_GRIPPED:
             response.workpiece_gripped = True
             response.success = True
@@ -1155,8 +1156,6 @@ class Driver(Node):
         elif grip_result == gripper["driver"].GripResult.WORKPIECE_LOST:
             response.workpiece_lost = True
             response.success = True
-        elif grip_result == gripper["driver"].GripResult.ERROR:
-            response.error = True
 
         response.message = gripper["driver"].get_status_diagnostics()
         return response
