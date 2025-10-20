@@ -18,5 +18,14 @@ float32 velocity # Speed for the gripping motion in [m/s].
                  # At 50% force the speed is set to the value of
                  # parameter 0x0628 (min_vel)
 ---
-bool success
-string message
+
+# Flags indicating the outcome of the grip action.
+# If the grip action failed, all flags below will be False.
+# If the grip action succeeded, exactly one of the flags below will be True.
+bool workpiece_gripped
+bool no_workpiece_detected
+bool wrong_workpiece_gripped
+bool workpiece_lost
+
+bool success   # Overall success status; False if an error occurred.
+string message # Human-readable status or error description.

@@ -15,6 +15,7 @@ from pymodbus.logging import Log
 import serial  # type: ignore [import-untyped]
 from pymodbus.exceptions import ModbusIOException
 from typing import Any, Type, cast
+from enum import Enum, auto
 
 
 class NonExclusiveSerialClient(ModbusSerialClient):
@@ -48,6 +49,13 @@ class NonExclusiveSerialClient(ModbusSerialClient):
 
 
 class Driver(object):
+    class GripResult(Enum):
+        WORKPIECE_GRIPPED = auto()
+        NO_WORKPIECE_DETECTED = auto()
+        WRONG_WORKPIECE_GRIPPED = auto()
+        WORKPIECE_LOST = auto()
+        ERROR = auto()
+
     def __init__(self) -> None:
         self.plc_input: str = "0x0040"
         self.plc_output: str = "0x0048"
@@ -380,16 +388,16 @@ class Driver(object):
         use_gpe: bool = False,
         outward: bool = False,
         scheduler: Scheduler | None = None,
-    ) -> bool:
+    ) -> "Driver.GripResult":
         if not self.connected:
-            return False
+            return Driver.GripResult.ERROR
         if not self.set_gripping_force(force):
-            return False
+            return Driver.GripResult.ERROR
         if position is not None and not isinstance(position, int):
-            return False
+            return Driver.GripResult.ERROR
         if velocity is not None:
             if not isinstance(velocity, int) or velocity <= 0:
-                return False
+                return Driver.GripResult.ERROR
 
         if position is not None:
             trigger_bit = 16
@@ -421,10 +429,10 @@ class Driver(object):
         # send the grip command
         if scheduler:
             if not scheduler.execute(func=partial(start)).result():
-                return False
+                return Driver.GripResult.ERROR
         else:
             if not start():
-                return False
+                return Driver.GripResult.ERROR
 
         # estimate how long the grip will take
         epsilon_sec = 0.5  # additional time to account for delays
@@ -440,17 +448,27 @@ class Driver(object):
 
         duration_sec = estimated_duration_sec + prehold_time_sec + epsilon_sec
 
+        # define the possible status bit patterns to wait for
+        patterns = {}
+        patterns[Driver.GripResult.WORKPIECE_GRIPPED] = {"4": 1, "12": 1}
+        patterns[Driver.GripResult.NO_WORKPIECE_DETECTED] = {"4": 0, "11": 1}
+        patterns[Driver.GripResult.WRONG_WORKPIECE_GRIPPED] = {"4": 0, "17": 1}
+        patterns[Driver.GripResult.WORKPIECE_LOST] = {
+            "4": 0,
+            "16": 1,
+        }  # relevant for pre-gripping
+        patterns[Driver.GripResult.ERROR] = {"7": 1}
+
         # wait for the command to complete or an error to occur
         bits: list[dict[str, int]] = []
-        bits.append({"4": 1, "12": 1})  # command processed and workpiece gripped
-        bits.append({"4": 0, "11": 1})  # no workpiece detected
-        bits.append({"4": 0, "17": 1})  # wrong workpiece gripped
-        bits.append({"4": 0, "16": 1})  # workpiece lost (relevant for pre-gripping)
-        bits.append({"7": 1})  # error state
+        for pattern in patterns.values():
+            bits.append(pattern)
         matched_pattern = self.wait_for_any_status(bits=bits, timeout_sec=duration_sec)
 
-        # a grip has failed if either an error occured or the wait timed out
-        return matched_pattern not in [{}, {"7": 1}]
+        return next(
+            (k for k, v in patterns.items() if v == matched_pattern),
+            Driver.GripResult.ERROR,
+        )
 
     def release(
         self, use_gpe: bool = False, scheduler: Scheduler | None = None

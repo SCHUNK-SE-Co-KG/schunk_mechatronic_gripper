@@ -1134,7 +1134,7 @@ class Driver(Node):
         if velocity is not None:
             velocity = int(velocity * 1e6)
 
-        response.success = gripper["driver"].grip(
+        grip_result = gripper["driver"].grip(
             position=position,
             velocity=velocity,
             force=request.force,
@@ -1142,6 +1142,22 @@ class Driver(Node):
             outward=request.outward,
             scheduler=scheduler,
         )
+
+        if grip_result == gripper["driver"].GripResult.WORKPIECE_GRIPPED:
+            response.workpiece_gripped = True
+            response.success = True
+        elif grip_result == gripper["driver"].GripResult.WRONG_WORKPIECE_GRIPPED:
+            response.wrong_workpiece_gripped = True
+            response.success = True
+        elif grip_result == gripper["driver"].GripResult.NO_WORKPIECE_DETECTED:
+            response.no_workpiece_detected = True
+            response.success = True
+        elif grip_result == gripper["driver"].GripResult.WORKPIECE_LOST:
+            response.workpiece_lost = True
+            response.success = True
+        elif grip_result == gripper["driver"].GripResult.ERROR:
+            response.error = True
+
         response.message = gripper["driver"].get_status_diagnostics()
         return response
 
