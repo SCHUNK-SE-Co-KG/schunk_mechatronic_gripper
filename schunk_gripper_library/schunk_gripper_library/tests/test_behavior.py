@@ -74,9 +74,11 @@ def test_all_gripper_commands_run_with_a_scheduler():
 
     # Grip
     assert driver.acknowledge(scheduler=scheduler)
-    assert not driver.grip(
-        force=75, scheduler=scheduler
-    ), f"driver status: {driver.get_status_diagnostics()}"
+    grip_result = (
+        driver.grip(force=75, scheduler=scheduler),
+        f"driver status: {driver.get_status_diagnostics()}",
+    )
+    assert grip_result == Driver.GripResult.ERROR
 
     # Release
     assert driver.acknowledge(scheduler=scheduler)

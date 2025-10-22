@@ -37,7 +37,7 @@ def test_grip_works_with_valid_arguments():
         {"force": 199, "outward": True},
     ]
     for args in combinations:
-        assert driver.grip(**args)
+        assert driver.grip(**args) != Driver.GripResult.ERROR
     driver.disconnect()
 
 
