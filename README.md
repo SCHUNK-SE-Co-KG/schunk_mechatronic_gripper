@@ -41,7 +41,9 @@ The driver can **automatically detect connected grippers** and supports **handli
 
 ### Lifecycle Management
 
-The driver node follows the standard [ROS2 lifecycle](https://design.ros2.org/articles/node_lifecycle.html) conventions. All grippers managed by a single driver node share the **same lifecycle state** — `unconfigured`, `inactive`, `active`, and `finalized`. Provided services and published topics are only available when the driver (and all connected grippers) is in the appropriate lifecycle state. For example, issuing grip commands is only possible in the `active` state.
+The driver node follows the standard [ROS2 lifecycle](https://design.ros2.org/articles/node_lifecycle.html) conventions. All grippers managed by a single driver node share the **same lifecycle state** — `unconfigured`, `inactive`, `active`, and `finalized`.
+The driver does **not** perform state transitions automatically; all transitions must be triggered via service calls from an external client.
+Services and published topics are **bound to the lifecycle state** and are only available when the driver (and all connected grippers) is in the appropriate state. For example, grip commands can only be issued when the node is in the `active` state.
 
 
 ## Topics and Services
