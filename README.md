@@ -113,13 +113,13 @@ ros2 launch schunk_gripper_driver driver.launch.py
 
 ### Launch Options
 
-- **No arguments**
+- **No arguments:**
   Starts the driver with an empty configuration. The driver remains in the `unconfigured` state, allowing you to scan the network and add grippers individually using the provided services.
 
-- **Specify Ethernet/IP or Modbus address**
+- **Specify Ethernet/IP or Modbus address:**
   Pass connection parameters via launch arguments to immediately connect to specific grippers on startup.
 
-- **Headless mode**
+- **Headless mode:**
   Enable headless mode via a launch argument to load all previously saved grippers from the configuration file and automatically transition them to the `active` lifecycle state.
 
 
