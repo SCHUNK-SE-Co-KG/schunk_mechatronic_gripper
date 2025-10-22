@@ -99,9 +99,9 @@ class Driver(Node):
         }
         for name, default_value in self.init_parameters.items():
             self.declare_parameter(name, default_value)
-
+        gripper: Gripper
         if self.get_parameter("host").value:
-            gripper: Gripper = {
+            gripper = {
                 "host": self.get_parameter("host").value,
                 "port": self.get_parameter("port").value,
                 "serial_port": "",
@@ -111,7 +111,7 @@ class Driver(Node):
             }
             self.grippers.append(gripper)
         elif self.get_parameter("serial_port").value:
-            gripper: Gripper = {
+            gripper = {
                 "host": "",
                 "port": 0,
                 "serial_port": self.get_parameter("serial_port").value,
