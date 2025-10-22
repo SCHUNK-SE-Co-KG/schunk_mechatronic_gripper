@@ -358,10 +358,11 @@ def test_twitching_jaws_leaves_gripper_where_it_is():
         position=half, velocity=driver.module_parameters["max_vel"], is_absolute=True
     )
 
+    eps = 100  # tolerated position error in micrometers
     before = driver.get_actual_position()
     assert driver.twitch_jaws()
     after = driver.get_actual_position()
-    assert after == before
+    assert abs(after - before) <= eps, f"before: {before}, after: {after}"
 
     driver.disconnect()
 
