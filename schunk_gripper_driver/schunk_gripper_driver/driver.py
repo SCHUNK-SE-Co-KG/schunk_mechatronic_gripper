@@ -93,19 +93,27 @@ class Driver(Node):
         self.init_parameters = {
             "host": "",
             "port": 80,
-            "serial_port": "/dev/ttyUSB0",
+            "serial_port": "",
             "device_id": 12,
-            "start_empty": False,
             "headless": False,
         }
         for name, default_value in self.init_parameters.items():
             self.declare_parameter(name, default_value)
 
-        start_empty = self.get_parameter("start_empty").value
-        if not start_empty:
+        if self.get_parameter("host").value:
             gripper: Gripper = {
                 "host": self.get_parameter("host").value,
                 "port": self.get_parameter("port").value,
+                "serial_port": "",
+                "device_id": 0,
+                "driver": GripperDriver(),
+                "gripper_id": "",
+            }
+            self.grippers.append(gripper)
+        elif self.get_parameter("serial_port").value:
+            gripper: Gripper = {
+                "host": "",
+                "port": 0,
                 "serial_port": self.get_parameter("serial_port").value,
                 "device_id": self.get_parameter("device_id").value,
                 "driver": GripperDriver(),

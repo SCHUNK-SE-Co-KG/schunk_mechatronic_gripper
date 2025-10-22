@@ -31,19 +31,13 @@ port = DeclareLaunchArgument(
 )
 serial_port = DeclareLaunchArgument(
     "serial_port",
-    default_value="/dev/ttyUSB0",
+    default_value="",
     description="The gripper's serial port",
 )
 device_id = DeclareLaunchArgument(
     "device_id",
     default_value="12",
     description="The gripper's Modbus device id",
-)
-
-start_empty = DeclareLaunchArgument(
-    "start_empty",
-    default_value="false",
-    description="Whether to drop gripper-specific launch arguments",
 )
 
 headless = DeclareLaunchArgument(
@@ -55,7 +49,7 @@ headless = DeclareLaunchArgument(
     ),
 )
 
-args = [host, port, serial_port, device_id, start_empty, headless]
+args = [host, port, serial_port, device_id, headless]
 
 
 def generate_launch_description():
@@ -72,7 +66,6 @@ def generate_launch_description():
                     {"port": LaunchConfiguration("port")},
                     {"serial_port": LaunchConfiguration("serial_port")},
                     {"device_id": LaunchConfiguration("device_id")},
-                    {"start_empty": LaunchConfiguration("start_empty")},
                     {"headless": LaunchConfiguration("headless")},
                 ],
                 respawn=True,
