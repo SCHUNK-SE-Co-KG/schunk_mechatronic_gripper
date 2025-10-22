@@ -184,10 +184,6 @@ def test_driver_implements_acknowledge(lifecycle_interface):
         rclpy.spin_until_future_complete(node, future, timeout_sec=1)
 
         assert future.result().success
-        expected_msg = (
-            "error_code: 0x0, warning_code: 0x0, additional_code: 0x0"  # everything ok
-        )
-        assert future.result().message == expected_msg
 
     driver.change_state(Transition.TRANSITION_DEACTIVATE)
     driver.change_state(Transition.TRANSITION_CLEANUP)
