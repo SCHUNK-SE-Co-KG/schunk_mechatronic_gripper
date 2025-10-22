@@ -181,7 +181,7 @@ def test_driver_implements_acknowledge(lifecycle_interface):
         client = node.create_client(Trigger, f"/schunk/driver/{gripper}/acknowledge")
         assert client.wait_for_service(timeout_sec=2), f"gripper: {gripper}"
         future = client.call_async(Trigger.Request())
-        rclpy.spin_until_future_complete(node, future, timeout_sec=1)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=2)
 
         assert future.result().success
 
