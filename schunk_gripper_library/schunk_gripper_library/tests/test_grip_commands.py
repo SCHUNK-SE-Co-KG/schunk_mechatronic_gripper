@@ -4,7 +4,7 @@ from schunk_gripper_library.utility import skip_without_gripper
 
 def test_grip_fails_when_not_connected():
     driver = Driver()
-    assert not driver.grip(force=100)
+    assert driver.grip(force=100) == Driver.GripResult.ERROR
 
 
 @skip_without_gripper
@@ -18,7 +18,7 @@ def test_grip_fails_with_invalid_arguments():
         driver.acknowledge()
         invalid_forces = [0.1, -0.1, 75.0]
         for force in invalid_forces:
-            assert not driver.grip(force)
+            assert driver.grip(force=force) == Driver.GripResult.ERROR
 
         driver.disconnect()
 
@@ -52,11 +52,11 @@ def test_grip_moves_as_expected_with_the_outward_argument():
     middle = int(0.5 * (max_pos - min_pos))
 
     assert driver.acknowledge()
-    driver.grip(force=100, outward=True)
+    assert driver.grip(force=100, outward=True) != Driver.GripResult.ERROR
     assert driver.get_actual_position() > middle
 
     assert driver.acknowledge()
-    driver.grip(force=100, outward=False)
+    assert driver.grip(force=100, outward=False) != Driver.GripResult.ERROR
     assert driver.get_actual_position() < middle
 
     driver.disconnect()
@@ -74,7 +74,7 @@ def test_grip_at_position_fails_with_invalid_arguments():
 
     for pos in invalid_positions:
         for force in invalid_forces:
-            assert not driver.grip(force=force, position=pos)
+            assert driver.grip(force=force, position=pos) == Driver.GripResult.ERROR
 
     driver.disconnect()
 
@@ -90,7 +90,7 @@ def test_grip_with_velocity_fails_with_invalid_arguments():
 
     for vel in invalid_velocities:
         for force in forces:
-            assert not driver.grip(force=force, velocity=vel)
+            assert driver.grip(force=force, velocity=vel) == Driver.GripResult.ERROR
 
     driver.disconnect()
 
@@ -108,6 +108,9 @@ def test_grip_at_position_with_velocity_fails_with_invalid_arguments():
     for pos in invalid_positions:
         for vel in invalid_velocities:
             for force in forces:
-                assert not driver.grip(force=force, position=pos, velocity=vel)
+                assert (
+                    driver.grip(force=force, position=pos, velocity=vel)
+                    == Driver.GripResult.ERROR
+                )
 
     driver.disconnect()
