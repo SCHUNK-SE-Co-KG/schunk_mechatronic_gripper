@@ -396,7 +396,7 @@ class Driver(object):
         if position is not None and not isinstance(position, int):
             return Driver.GripResult.ERROR
         if velocity is not None:
-            if not isinstance(velocity, int) or velocity <= 0:
+            if not isinstance(velocity, int) or velocity < 0:
                 return Driver.GripResult.ERROR
 
         if position is not None:
