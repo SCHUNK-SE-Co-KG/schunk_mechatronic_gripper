@@ -1,6 +1,6 @@
-float32 position  # Absolute position in [m]
+float64 position  # Absolute position in [m]
 
-float32 velocity  # Velocity in [m/s]
+float64 velocity  # Velocity in [m/s]
 ---
 bool success
 string message

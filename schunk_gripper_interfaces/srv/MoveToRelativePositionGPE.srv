@@ -1,6 +1,6 @@
-float32 position  # Relative position in [m]
+float64 position  # Relative position in [m]
 
-float32 velocity  # Velocity in [m/s]
+float64 velocity  # Velocity in [m/s]
 
 bool use_gpe      # Whether to activate position maintenance after moving.
                   # Will only be used when available in the gripper.

@@ -11,7 +11,7 @@ bool outward  # Whether to grip the workpiece from the inside
               # (Fingers are moving outwards).
               # Defaults to False.
 
-float32 velocity # Speed for the gripping motion in [m/s].
+float64 velocity # Speed for the gripping motion in [m/s].
                  # If set to 0, the speed corresponds to the grip force
                  # At 100% force the speed is set to the value of
                  # parameter 0x0650 (max_grp_vel)
