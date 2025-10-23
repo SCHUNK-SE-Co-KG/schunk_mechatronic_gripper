@@ -158,6 +158,7 @@ def test_driver_implements_adding_and_resetting_grippers(driver):
         rclpy.spin_until_future_complete(node, future)
         assert future.result().success
 
+
 @skip_without_gripper
 def test_driver_implements_show_configuration(driver):
     node = Node("check_listing_configuration")

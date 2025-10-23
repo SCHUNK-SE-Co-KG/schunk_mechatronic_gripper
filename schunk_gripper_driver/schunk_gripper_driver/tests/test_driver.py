@@ -37,6 +37,7 @@ from rclpy.lifecycle import TransitionCallbackReturn
 from threading import Thread
 import time
 
+
 @skip_without_gripper
 def test_driver_manages_a_list_of_grippers(ros2: None):
     driver = Driver("driver")
@@ -568,14 +569,14 @@ def test_driver_rejects_adding_duplicate_grippers(ros2: None):
 def test_driver_offers_resetting_grippers(ros2: None):
     driver = Driver("driver")
     gripper = Gripper(
-    {
-        "host": "",
-        "port": 0,
-        "serial_port": "/dev/ttyUSB0",
-        "device_id": 12,
-        "driver": GripperDriver(),
-        "gripper_id": "",
-    }
+        {
+            "host": "",
+            "port": 0,
+            "serial_port": "/dev/ttyUSB0",
+            "device_id": 12,
+            "driver": GripperDriver(),
+            "gripper_id": "",
+        }
     )
     driver.grippers.append(gripper)
     assert len(driver.grippers) == 1
@@ -623,14 +624,14 @@ def test_driver_schedules_concurrent_module_updates(ros2: None):
 def test_driver_shows_configuration(ros2: None):
     driver = Driver("driver")
     gripper = Gripper(
-    {
-        "host": "",
-        "port": 0,
-        "serial_port": "/dev/ttyUSB0",
-        "device_id": 12,
-        "driver": GripperDriver(),
-        "gripper_id": "",
-    }
+        {
+            "host": "",
+            "port": 0,
+            "serial_port": "/dev/ttyUSB0",
+            "device_id": 12,
+            "driver": GripperDriver(),
+            "gripper_id": "",
+        }
     )
     driver.grippers.append(gripper)
     config = driver.show_configuration()
