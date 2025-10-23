@@ -190,11 +190,12 @@ def test_driver_supports_waiting_for_desired_status():
         invalid_bits = {"33": 1, "-1": 0}
         assert not driver.wait_for_status(bits=invalid_bits, timeout_sec=0.1)
 
-        # Fails but survives invalid timeouts
+        # invalid timeouts should raise an exception
         matching_bits = {"0": 0, "7": 1}
         invalid_timeouts = [0.0, 0, -1.5]
         for timeout in invalid_timeouts:
-            assert not driver.wait_for_status(bits=matching_bits, timeout_sec=timeout)
+            with pytest.raises(ValueError):
+                driver.wait_for_status(bits=matching_bits, timeout_sec=timeout)
 
         # Fails with empty bits
         assert not driver.wait_for_status(bits={})
@@ -499,14 +500,15 @@ def test_driver_estimates_duration_of_grip_at_position():
     def set_actual_position(position: int) -> None:
         driver.plc_input_buffer[4:8] = bytes(struct.pack("i", position))
 
-    # Fix position, vary force
+    # Velocity increases with increasing force,
+    # however max velocity is capped at 100% force
     set_actual_position(min_pos)
-    forces = [130, 175, 200]
+    forces = [130, 175, 200]  # these must all have the same durations (capped velocity)
     durations = []
     for force in forces:
         duration = driver.estimate_duration(position_abs=mid_pos, force=force)
         durations.append(duration)
-    assert durations[0] > durations[1] > durations[2]
+    assert durations[0] == durations[1] == durations[2]
 
     # Fix force, vary position
     fixed_force = 175

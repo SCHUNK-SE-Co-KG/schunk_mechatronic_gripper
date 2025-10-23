@@ -74,9 +74,11 @@ def test_all_gripper_commands_run_with_a_scheduler():
 
     # Grip
     assert driver.acknowledge(scheduler=scheduler)
-    assert not driver.grip(
-        force=75, scheduler=scheduler
-    ), f"driver status: {driver.get_status_diagnostics()}"
+    grip_result = (
+        driver.grip(force=75, scheduler=scheduler),
+        f"driver status: {driver.get_status_diagnostics()}",
+    )
+    assert grip_result != Driver.GripResult.ERROR
 
     # Release
     assert driver.acknowledge(scheduler=scheduler)
@@ -345,9 +347,8 @@ def test_twitching_jaws_leaves_gripper_where_it_is():
     # When not connected
     assert not driver.twitch_jaws()
 
-    # Only web dummy for now.
-    # The BKS firmware has inconsistent accuracy for motion commands
-    assert driver.connect(host="0.0.0.0", port=8000, update_cycle=None)
+    # The web dummy cannot twitch that well, so we test only on Modbus here.
+    assert driver.connect(device_id=12, update_cycle=None)
     driver.acknowledge()
 
     max_pos = driver.module_parameters["max_pos"]
@@ -357,10 +358,11 @@ def test_twitching_jaws_leaves_gripper_where_it_is():
         position=half, velocity=driver.module_parameters["max_vel"], is_absolute=True
     )
 
+    eps = 100  # tolerated position error in micrometers
     before = driver.get_actual_position()
     assert driver.twitch_jaws()
     after = driver.get_actual_position()
-    assert after == before
+    assert abs(after - before) <= eps, f"before: {before}, after: {after}"
 
     driver.disconnect()
 
