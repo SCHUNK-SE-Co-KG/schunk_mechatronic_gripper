@@ -1,4 +1,4 @@
-float32 velocity  # Velocity in [m/s]
+float64 velocity  # Velocity in [m/s]
 ---
 bool success
 string message

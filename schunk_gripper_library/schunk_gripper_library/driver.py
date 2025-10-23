@@ -328,6 +328,27 @@ class Driver(object):
         use_gpe: bool = False,
         scheduler: Scheduler | None = None,
     ) -> bool:
+        """Sends a move to position command to the gripper.
+
+        This command blocks until the move is completed or an error occurs.
+
+        Note:
+            All integer parameters must be 32-bit signed integers,
+            as expected by the gripper.
+            If a value exceeds these bounds, an error is returned.
+
+        Args:
+            position (int): Target position in micrometers.
+            velocity (int): Movement velocity in micrometers per second.
+            is_absolute (bool): Whether the position is absolute (True)
+                                or relative (False).
+            use_gpe (bool): Whether to use GPE functionality.
+            scheduler (Scheduler | None): Optional scheduler for command execution.
+
+        Returns:
+            bool: True if the move was successful, False otherwise.
+        """
+
         if not self.connected:
             return False
         if not self.set_target_position(position):
@@ -389,15 +410,34 @@ class Driver(object):
         outward: bool = False,
         scheduler: Scheduler | None = None,
     ) -> "Driver.GripResult":
+        """Sends a grip command to the gripper.
+
+        This command blocks until the grip is completed or an error occurs.
+
+        Note:
+            All integer parameters must be 32-bit signed integers,
+            as expected by the gripper.
+            If a value exceeds these bounds, an error is returned.
+
+        Args:
+            force (int): Gripping force in percentage (can exceed 100 for strong grips).
+            position (int | None): Optional position parameter in micrometers.
+                                    If None, the gripper will grip fully inwards
+                                    or outwards based on the `outward` parameter.
+            velocity (int | None): Optional gripping velocity in micrometers per second.
+                                  If None, the gripper will use a velocity
+                                  based on the specified force.
+            use_gpe (bool): Whether to use GPE functionality if available.
+            outward (bool): Whether to grip from outside (True) or from inside (False).
+            scheduler (Scheduler | None): Optional scheduler for command execution.
+
+        Returns:
+            Driver.GripResult: Result of the grip operation.
+        """
         if not self.connected:
             return Driver.GripResult.ERROR
         if not self.set_gripping_force(force):
             return Driver.GripResult.ERROR
-        if position is not None and not isinstance(position, int):
-            return Driver.GripResult.ERROR
-        if velocity is not None:
-            if not isinstance(velocity, int) or velocity < 0:
-                return Driver.GripResult.ERROR
 
         if position is not None:
             trigger_bit = 16
@@ -417,9 +457,11 @@ class Driver(object):
                 self.set_control_bit(bit=31, value=False)
             self.set_gripping_force(force)
             if position is not None:
-                self.set_target_position(position)
+                if not self.set_target_position(position):
+                    return False
             if velocity is not None:
-                self.set_target_speed(velocity)
+                if not self.set_target_speed(velocity):
+                    return False
             else:
                 self.set_target_speed(0)
             self.send_plc_output()
@@ -625,6 +667,19 @@ class Driver(object):
     def start_jogging(
         self, velocity: int, use_gpe: bool = False, scheduler: Scheduler | None = None
     ) -> bool:
+        """Sends the start jogging command to the gripper.
+
+        Args:
+            velocity -- The speed at which to jog in micrometers per second.
+                        Positive values jog outwards, negative values jog inwards.
+                        This value must fit into a 32-bit signed integer, otherwise
+                        False is returned.
+            use_gpe -- Whether to use GPE functionality.
+            scheduler -- Optional scheduler for command execution.
+
+        Returns:
+            bool: True if the command was successful, False otherwise.
+        """
         if not self.connected:
             return False
 
@@ -1187,7 +1242,11 @@ class Driver(object):
         with self.output_buffer_lock:
             if not isinstance(target_pos, int):
                 return False
-            data = bytes(struct.pack("i", target_pos))
+            data = bytes()
+            try:
+                data = bytes(struct.pack("i", target_pos))
+            except struct.error:
+                return False
             if self.fieldbus == "PN":
                 data = data[::-1]
             self.plc_output_buffer[4:8] = data
@@ -1206,7 +1265,11 @@ class Driver(object):
                 return False
             if target_speed < 0:
                 return False
-            data = bytes(struct.pack("i", target_speed))
+            data = bytes()
+            try:
+                data = bytes(struct.pack("i", target_speed))
+            except struct.error:
+                return False
             if self.fieldbus == "PN":
                 data = data[::-1]
             self.plc_output_buffer[8:12] = data
@@ -1223,7 +1286,11 @@ class Driver(object):
         with self.output_buffer_lock:
             if not isinstance(gripping_force, int):
                 return False
-            data = bytes(struct.pack("i", gripping_force))
+            data = bytes()
+            try:
+                data = bytes(struct.pack("i", gripping_force))
+            except struct.error:
+                return False
             if self.fieldbus == "PN":
                 data = data[::-1]
             self.plc_output_buffer[12:16] = data
