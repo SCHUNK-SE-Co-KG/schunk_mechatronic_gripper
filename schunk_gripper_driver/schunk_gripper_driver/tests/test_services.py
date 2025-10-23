@@ -159,6 +159,7 @@ def test_driver_implements_adding_and_resetting_grippers(driver):
         assert future.result().success
 
 
+@skip_without_gripper
 def test_driver_implements_show_configuration(driver):
     node = Node("check_listing_configuration")
     client = node.create_client(ShowConfiguration, "/schunk/driver/show_configuration")
