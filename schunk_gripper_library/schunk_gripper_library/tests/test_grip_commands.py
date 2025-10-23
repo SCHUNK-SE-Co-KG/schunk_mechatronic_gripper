@@ -16,7 +16,8 @@ def test_grip_fails_with_invalid_arguments():
         # Invalid arguments
         driver.connect(host=host, port=port, serial_port=serial_port, device_id=12)
         driver.acknowledge()
-        invalid_forces = [0.1, -0.1, 75.0]
+        max_int32 = 2147483647
+        invalid_forces = [0.1, -0.1, 75.0, max_int32 + 1]
         for force in invalid_forces:
             assert driver.grip(force=force) == Driver.GripResult.ERROR
 
