@@ -6,6 +6,8 @@
   <img src="resources/images/schunk_ezu.webp" alt="EZU" width="25%">
 </p>
 
+<h1 align="center">SCHUNK Gripper</h1>
+
 <p align="center">
   <a href="https://opensource.org/licenses/gpl-license">
     <img src="https://img.shields.io/badge/License-GPLv3-orange.svg" alt="License">
