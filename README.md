@@ -28,6 +28,41 @@ The **SCHUNK Gripper ROS2 Driver** provides full functionality for controlling S
 Currently, the driver supports only grippers with **Modbus RTU** or **Ethernet/IP** interfaces.
 
 
+## Overview
+
+The SCHUNK Gripper ROS2 driver provides an interface to control SCHUNK mechatronic grippers over either **Modbus RTU** or **Ethernet/IP**.
+The driver architecture consists of:
+
+- **Gripper Library** – handles low-level communication and abstracts the protocol details for each gripper variant.
+- **ROS2 Node** – exposes topics and services to read the gripper state and send commands.
+- **Interfaces** - a collection of message and service defintions to interact with the grippers.
+
+The driver can **automatically detect connected grippers** and supports **handling multiple grippers simultaneously** within a single ROS2 node, with each gripper running in a separate ROS2 namespace.
+
+### Lifecycle Management
+
+The driver node follows the standard [ROS2 lifecycle](https://design.ros2.org/articles/node_lifecycle.html) conventions. All grippers managed by a single driver node share the **same lifecycle state** — `unconfigured`, `inactive`, `active`, and `finalized`. Provided services and published topics are only available when the driver (and all connected grippers) is in the appropriate lifecycle state. For example, issuing grip commands is only possible in the `active` state.
+
+
+## Topics and Services
+
+The driver exposes topics and services to retrieve the gripper state and parameters, and to issue commands such as gripping, moving, jogging, releasing etc.
+All topics and services are namespaced per gripper and are advertised only when the driver is in the appropriate lifecycle state (e.g., `active`).
+
+
+## Connecting to Grippers
+
+The driver starts in the `unconfigured` lifecycle state. In this state, it provides services to scan the network for available grippers and to add them to the driver.
+<br>
+Once the driver has transitioned into the `active` lifecycle state, each added gripper can be accessed and controlled through its assigned namespace.
+
+It is also possible to locate connected grippers by triggering a twitch of their fingers via a service call. This feature is useful in scenarios where you need to identify which physical gripper corresponds to which connection.
+
+### Auto-Connect
+
+Grippers that have been added to the driver can be saved to a configuration file via a service call. This configuration file can be loaded either via a service call or a launch argument, allowing the driver to automatically connect to all previously saved grippers. If a saved gripper is not physically available at runtime, its corresponding services will still be published, but calling them will result in no-ops.
+
+
 ## Installation
 
 1. Clone the repository into your ROS2 workspace and install system dependencies:
@@ -62,41 +97,6 @@ Currently, the driver supports only grippers with **Modbus RTU** or **Ethernet/I
     ```bash
     pip install empy catkin_pkg lark
     ```
-
-
-## Overview
-
-The SCHUNK Gripper ROS2 driver provides an interface to control SCHUNK mechatronic grippers over either **Modbus RTU** or **Ethernet/IP**.
-The driver architecture consists of:
-
-- **Gripper Library** – handles low-level communication and abstracts the protocol details for each gripper variant.
-- **ROS2 Node** – exposes topics and services to read the gripper state and send commands.
-- **Interfaces** - a collection of message and service defintions to interact with the grippers.
-
-The driver can **automatically detect connected grippers** and supports **handling multiple grippers simultaneously** within a single ROS2 node, with each gripper running in a separate ROS2 namespace.
-
-### Lifecycle Management
-
-The driver node follows the standard [ROS2 lifecycle](https://design.ros2.org/articles/node_lifecycle.html) conventions. All grippers managed by a single driver node share the **same lifecycle state** — `unconfigured`, `inactive`, `active`, and `finalized`. Provided services and published topics are only available when the driver (and all connected grippers) is in the appropriate lifecycle state. For example, issuing grip commands is only possible in the `active` state.
-
-
-## Topics and Services
-
-The driver exposes topics and services to retrieve the gripper state and parameters, and to issue commands such as gripping, moving, jogging, releasing etc.
-All topics and services are namespaced per gripper and are advertised only when the driver is in the appropriate lifecycle state (e.g., `active`).
-
-
-## Connecting to Grippers
-
-The driver starts in the `unconfigured` lifecycle state. In this state, it provides services to scan the network for available grippers and to add them to the driver.
-<br>
-Once the driver has transitioned into the `active` lifecycle state, each added gripper can be accessed and controlled through its assigned namespace.
-
-It is also possible to locate connected grippers by triggering a twitch of their fingers via a service call. This feature is useful in scenarios where you need to identify which physical gripper corresponds to which connection.
-
-### Auto-Connect
-
-Grippers that have been added to the driver can be saved to a configuration file via a service call. This configuration file can be loaded either via a service call or a launch argument, allowing the driver to automatically connect to all previously saved grippers. If a saved gripper is not physically available at runtime, its corresponding services will still be published, but calling them will result in no-ops.
 
 
 ## Launching the Driver
