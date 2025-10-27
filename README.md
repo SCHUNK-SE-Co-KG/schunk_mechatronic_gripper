@@ -25,8 +25,11 @@ The **SCHUNK Gripper ROS2 Driver** provides full functionality for controlling S
 - [EGK](https://schunk.com/us/en/gripping-systems/parallel-gripper/egk/c/PGR_6557) – gripper for small components
 - [EZU](https://schunk.com/us/en/gripping-systems/centric-grippers/ezu/c/PGR_7387) – centric gripper
 
-Currently, the driver supports only grippers with **Modbus RTU** or **Ethernet/IP** interfaces.
-
+Currently, the driver supports grippers with following interfaces:
+- Ethernet/IP
+- Modbus RTU
+- Profinet
+- Ethernet over EtherCAT (EoE)
 
 ## Overview
 
@@ -42,7 +45,9 @@ The driver can **automatically detect connected grippers** and supports **handli
 ### Lifecycle Management
 
 The driver node follows the standard [ROS2 lifecycle](https://design.ros2.org/articles/node_lifecycle.html) conventions. All grippers managed by a single driver node share the **same lifecycle state** — `unconfigured`, `inactive`, `active`, and `finalized`.
-The driver does **not** perform state transitions automatically; all transitions must be triggered via service calls from an external client.
+
+When running in **normal mode**, the driver does **not** perform state transitions automatically; all transitions must be triggered via service calls from an external client. In **headless mode**, the driver does transition automatically to the `active` state after startup.
+
 Services and published topics are **bound to the lifecycle state** and are only available when the driver (and all connected grippers) is in the appropriate state. For example, grip commands can only be issued when the node is in the `active` state.
 
 
@@ -118,11 +123,11 @@ ros2 launch schunk_gripper_driver driver.launch.py
 - **No arguments:**
   Starts the driver with an empty configuration. The driver remains in the `unconfigured` state, allowing you to scan the network and add grippers individually using the provided services.
 
-- **Specify Ethernet/IP or Modbus address:**
+- **Specify IP or Modbus address:**
   Pass connection parameters via launch arguments to immediately connect to specific grippers on startup.
 
 - **Headless mode:**
-  Enable headless mode via a launch argument to load all previously saved grippers from the configuration file and automatically transition them to the `active` lifecycle state.
+  In headless mode the driver loads all previously saved grippers from the configuration file and automatically transitions them to the `active` lifecycle state.
 
 
 ## Contributing
