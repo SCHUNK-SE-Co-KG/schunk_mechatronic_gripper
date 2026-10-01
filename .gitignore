@@ -2,6 +2,7 @@ build/
 install/
 log/
 /.vscode
+*.env
 
 # Ignore test coverage artifacts
 *.coverage
