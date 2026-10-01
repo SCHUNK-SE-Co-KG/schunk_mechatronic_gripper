@@ -121,7 +121,36 @@ This example connects a Modbus gripper with ID 13 at serial port `/dev/ttyUSB0` 
 Launch the driver:
 
 ```bash
-ros2 launch schunk_gripper_driver driver.launch.py serial_port:=/dev/ttyUSB0 device_id:=13
+ros2 launch schunk_gripper_driver driver.launch.py serial_port:=/dev/ttyUSB0 device_id:=13 baudrate:=115200
 ```
 
 The driver starts in the `unconfigured` state. You can now proceed as in _Example 1_.
+
+The `baudrate` argument controls the Modbus baudrate. Its default value is `115200`.
+
+
+## Example 4: Stream target positions
+
+After the driver is active and the gripper is connected, enable target-position streaming:
+
+```bash
+ros2 service call /schunk/driver/EGU_50_MB_M_B_1/set_stream std_srvs/srv/SetBool "{data: true}"
+```
+
+Publish target positions in meters to the gripper's stream topic:
+
+```bash
+ros2 topic pub --rate 20 /schunk/driver/EGU_50_MB_M_B_1/stream/target_position std_msgs/msg/Float32 "{data: 0.05}"
+```
+
+While streaming is enabled, regular motion commands are rejected. Stop and shutdown-related commands remain available. Disable streaming before sending regular motion commands again:
+
+```bash
+ros2 service call /schunk/driver/EGU_50_MB_M_B_1/set_stream std_srvs/srv/SetBool "{data: false}"
+```
+
+You can query the current streaming state with:
+
+```bash
+ros2 service call /schunk/driver/EGU_50_MB_M_B_1/is_stream_enabled schunk_gripper_interfaces/srv/IsStreamEnabled
+```
