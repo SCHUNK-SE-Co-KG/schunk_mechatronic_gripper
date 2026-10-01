@@ -38,6 +38,7 @@ The table below lists all driver-level and per-gripper endpoints and their lifec
 | Driver       | /schunk/driver/set_parameters_atomically                       | Service  | rcl_interfaces/srv/SetParametersAtomically               | unconfigured, active  |
 | Per-gripper  | /schunk/driver/<gripper_id>/gripper_state                      | Topic    | schunk_gripper_interfaces/msg/GripperState               | active                |
 | Per-gripper  | /schunk/driver/<gripper_id>/joint_states                       | Topic    | sensor_msgs/msg/JointState                               | active                |
+| Per-gripper  | /schunk/driver/<gripper_id>/stream/target_position              | Topic    | std_msgs/msg/Float32                                      | active                |
 | Per-gripper  | /schunk/driver/<gripper_id>/acknowledge                        | Service  | std_srvs/srv/Trigger                                     | active                |
 | Per-gripper  | /schunk/driver/<gripper_id>/brake_test                         | Service  | std_srvs/srv/Trigger                                     | active                |
 | Per-gripper  | /schunk/driver/<gripper_id>/fast_stop                          | Service  | std_srvs/srv/Trigger                                     | active                |
@@ -52,6 +53,8 @@ The table below lists all driver-level and per-gripper endpoints and their lifec
 | Per-gripper  | /schunk/driver/<gripper_id>/show_specification                 | Service  | schunk_gripper_interfaces/srv/ShowGripperSpecification   | active                |
 | Per-gripper  | /schunk/driver/<gripper_id>/soft_reset                         | Service  | std_srvs/srv/Trigger                                     | active                |
 | Per-gripper  | /schunk/driver/<gripper_id>/start_jogging                      | Service  | schunk_gripper_interfaces/srv/StartJoggingGPE            | active                |
+| Per-gripper  | /schunk/driver/<gripper_id>/set_stream                        | Service  | std_srvs/srv/SetBool                                     | active                |
 | Per-gripper  | /schunk/driver/<gripper_id>/stop                               | Service  | schunk_gripper_interfaces/srv/StopWithGPE                | active                |
 | Per-gripper  | /schunk/driver/<gripper_id>/stop_jogging                       | Service  | std_srvs/srv/Trigger                                     | active                |
+| Per-gripper  | /schunk/driver/<gripper_id>/is_stream_enabled                  | Service  | schunk_gripper_interfaces/srv/IsStreamEnabled            | active                |
 | Per-gripper  | /schunk/driver/<gripper_id>/write_parameter                    | Service  | schunk_gripper_interfaces/srv/WriteGripperParameter      | active                |

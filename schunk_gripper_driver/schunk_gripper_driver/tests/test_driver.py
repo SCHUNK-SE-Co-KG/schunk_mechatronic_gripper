@@ -15,6 +15,8 @@
 # --------------------------------------------------------------------------------
 
 
+import pytest
+
 from schunk_gripper_driver.driver import Driver
 from schunk_gripper_library.utility import skip_without_gripper
 from schunk_gripper_library.driver import Driver as GripperDriver
@@ -183,6 +185,7 @@ def test_driver_checks_if_grippers_need_synchronization(ros2: None):
             "device_id": 12,
             "driver": GripperDriver(),
             "gripper_id": "",
+            "is_streaming": False,
         }
     )
     driver.grippers.append(default_gripper)
@@ -196,6 +199,7 @@ def test_driver_checks_if_grippers_need_synchronization(ros2: None):
             "device_id": 12,
             "driver": GripperDriver(),
             "gripper_id": "",
+            "is_streaming": False,
         }
     )
     driver.grippers.append(gripper)
@@ -218,6 +222,7 @@ def test_driver_checks_if_grippers_need_synchronization(ros2: None):
                 "device_id": 12,
                 "driver": GripperDriver(),
                 "gripper_id": "",
+                "is_streaming": False,
             }
         )
         driver.grippers.append(gripper)
@@ -237,6 +242,7 @@ def test_driver_doesnt_synchronize_empty_serial_ports(ros2):
             "device_id": 0,
             "driver": GripperDriver(),
             "gripper_id": "other",
+            "is_streaming": False,
         }
     )
     driver.grippers.append(other)
@@ -255,6 +261,7 @@ def test_driver_synchronizes_ethernet_grippers_with_nonempty_serial_ports(ros2):
             "device_id": 0,
             "driver": GripperDriver(),
             "gripper_id": "",
+            "is_streaming": False,
         }
     )
     driver.grippers.append(one)
@@ -266,6 +273,7 @@ def test_driver_synchronizes_ethernet_grippers_with_nonempty_serial_ports(ros2):
             "device_id": 0,
             "driver": GripperDriver(),
             "gripper_id": "",
+            "is_streaming": False,
         }
     )
     driver.grippers.append(two)
@@ -483,6 +491,26 @@ def test_driver_checks_connection_when_adding_grippers(ros2: None):
     assert driver.add_gripper(gripper_id="xyz", serial_port="invalid", device_id=12)
 
 
+def test_driver_does_not_pass_baudrate_to_ethernet_connection(
+    ros2: None, monkeypatch: pytest.MonkeyPatch
+):
+    connection_args = {}
+
+    def connect(_driver, **kwargs):
+        connection_args.update(kwargs)
+        _driver.gripper_type = "EGK_40_EI"
+        return True
+
+    monkeypatch.setattr(GripperDriver, "connect", connect)
+    monkeypatch.setattr(GripperDriver, "disconnect", lambda _driver: True)
+
+    driver = Driver("driver")
+
+    assert driver.add_gripper(host="192.168.0.2", port=80)
+    assert connection_args["host"] == "192.168.0.2"
+    assert "baudrate" not in connection_args
+
+
 def test_driver_offers_getting_unique_gripper_ids(ros2: None):
     driver = Driver("driver")
 
@@ -504,6 +532,7 @@ def test_driver_offers_getting_unique_gripper_ids(ros2: None):
                     "device_id": 0,
                     "driver": GripperDriver(),
                     "gripper_id": gripper_id,
+                    "is_streaming": False,
                 }
             )
             driver.grippers.append(gripper)
@@ -578,6 +607,7 @@ def test_driver_offers_resetting_grippers(ros2: None):
             "device_id": 12,
             "driver": GripperDriver(),
             "gripper_id": "",
+            "is_streaming": False,
         }
     )
     driver.grippers.append(gripper)
@@ -633,6 +663,7 @@ def test_driver_shows_configuration(ros2: None):
             "device_id": 12,
             "driver": GripperDriver(),
             "gripper_id": "",
+            "is_streaming": False,
         }
     )
     driver.grippers.append(gripper)

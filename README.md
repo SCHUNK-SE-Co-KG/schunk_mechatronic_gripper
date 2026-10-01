@@ -89,6 +89,14 @@ All service names are consistent across all supported gripper types; however, so
 A full list of available endpoints and their lifecycle availability can be found here: [docs/topics_and_services.md](./docs/topics_and_services.md)
 
 
+## Gripper Control Modes
+
+The driver supports two control modes:
+
+* **Service-based control:** Commands such as move or grip are sent via synchronous service calls to the driver.
+* **Target-position streaming:** Target positions are published to a topic and continuously processed by the driver, allowing highly dynamic trajectories and real-time position updates.
+
+
 ## Connecting to Grippers
 
 The driver starts in the `unconfigured` lifecycle state. In this state, it provides services to scan the network for available grippers and to add them to the driver.
@@ -118,4 +126,3 @@ This project has received public funding from the **European Union** NextGenerat
 <p align="center">
   <img alt="Bundesministerium für Wirtschaft und Energie (BMWE)-EU and secunet funding logo" src="resources/images/bmwe_logo.png" width="400"/>
 </p>
-
