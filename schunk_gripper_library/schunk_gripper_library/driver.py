@@ -37,6 +37,13 @@ global_modbus_client_lock = Lock()
 # key: serial_port, value: ModbusSerialClient instance (do not use this map directly, use get_global_modbus_client() instead)
 _global_modbus_client_map : dict[str, ModbusSerialClient] = {}
 
+# BKE2 (HMS Anybus) and BKE3 (Hilscher netX90) electronics serve the ADI webserver under different paths.
+ADI_PATHS: dict[str, tuple[str, str]] = {
+    "BKE2": ("/adi/data.json", "/adi/update.json"),
+    "BKE3": ("/webif/adi/data.json", "/webif/adi/update.json"),
+}
+BKE3_MIN_FIRMWARE_MAJOR: int = 6
+
 
 def get_global_modbus_client(serial_port: str = "/dev/ttyUSB0", baudrate: int = 115200):
     with global_modbus_client_lock:
@@ -137,6 +144,7 @@ class Driver(object):
         self.web_client: Client | None = None
         self.host: str = ""
         self.port: int = 80
+        self.hardware_style: str = ""  # "BKE2" or "BKE3", only for TCP/IP
         self.web_client_lock: Lock = Lock()
         self.connected: bool = False
         self.polling_thread: Thread = Thread()
@@ -180,15 +188,8 @@ class Driver(object):
             self.port = port
             with self.web_client_lock:
                 self.web_client = Client(timeout=1.0)
-                try:
-                    self.connected = self.web_client.get(
-                        f"http://{host}:{port}/adi/data.json"
-                    ).is_success
-                except (ConnectError, ConnectTimeout):
-                    self.connected = False
-                except HTTPError as e:
-                    print(f"{type(e)}: {e}")
-                    self.connected = False
+                self.hardware_style = self._detect_hardware_style()
+                self.connected = bool(self.hardware_style)
 
         # Modbus
         else:
@@ -225,6 +226,7 @@ class Driver(object):
         if self.web_client:
             with self.web_client_lock:
                 self.web_client = None
+        self.hardware_style = ""
 
         self.connected = False
         self.clear_module_parameters()
@@ -1068,11 +1070,14 @@ class Driver(object):
 
         if self.web_client:
             # read from http server
-            params = {"inst": param, "count": "1"}
+            if self.hardware_style not in ADI_PATHS:
+                return result
+            params = {"inst": self._adi_inst(param), "count": "1"}
+            data_path, _ = ADI_PATHS[self.hardware_style]
             with self.web_client_lock:
                 try:
                     response = self.web_client.get(
-                        f"http://{self.host}:{self.port}/adi/data.json", params=params
+                        f"http://{self.host}:{self.port}{data_path}", params=params
                     )
                 except (Exception) as e:
                     print(f"{type(e)}: {e}")
@@ -1170,11 +1175,14 @@ class Driver(object):
 
         if self.web_client:
             # write to http server
-            payload = {"inst": param, "value": data.hex().upper()}
+            payload = {"inst": self._adi_inst(param), "value": data.hex().upper()}
+            _, update_path = ADI_PATHS[self.hardware_style]
+            url = f"http://{self.host}:{self.port}{update_path}"
             with self.web_client_lock:
-                response = self.web_client.post(
-                    url=f"http://{self.host}:{self.port}/adi/update.json", data=payload
-                )
+                if self.hardware_style == "BKE3":
+                    response = self.web_client.post(url=url, params=payload)
+                else:
+                    response = self.web_client.post(url=url, data=payload)
             return response.is_success
 
         return False
@@ -1338,6 +1346,45 @@ class Driver(object):
                 return True
             time.sleep(self.update_cycle)
         return False
+
+    def _adi_inst(self, param: str, hardware_style: str | None = None) -> str | int:
+        """BKE2 expects the ADI instance as hex string ("0x0040"), BKE3 as integer (64)."""
+        if (hardware_style or self.hardware_style) == "BKE3":
+            return int(param, 16)
+        return param
+
+    def _detect_hardware_style(self) -> str:
+        """Probes the ADI paths and classifies the gripper by its firmware version (0x1118).
+
+        Must be called with `web_client_lock` held.
+
+        Returns:
+            str: "BKE2" or "BKE3", or an empty string if the gripper is not reachable.
+        """
+        if not self.web_client:
+            return ""
+        fw_param = "0x1118"
+        for style, (data_path, _) in ADI_PATHS.items():
+            try:
+                response = self.web_client.get(
+                    f"http://{self.host}:{self.port}{data_path}",
+                    params={"inst": self._adi_inst(fw_param, style), "count": "1"},
+                )
+            except (ConnectError, ConnectTimeout):
+                return ""
+            except HTTPError as e:
+                print(f"{type(e)}: {e}")
+                continue
+            # the wrong path may answer with an HTML page instead of failing
+            if not response.is_success or "json" not in response.headers.get("content-type", ""):
+                continue
+            try:
+                version = bytes.fromhex(response.json()[0]).rstrip(b"\x00").decode("ascii").strip()
+                major = int(version.split(".")[0])
+            except (ValueError, IndexError, TypeError):
+                continue
+            return "BKE3" if major >= BKE3_MIN_FIRMWARE_MAJOR else "BKE2"
+        return ""
 
     def contains_non_hex_chars(self, buffer: str) -> bool:
         return bool(re.search(r"[^0-9a-fA-F]", buffer))
