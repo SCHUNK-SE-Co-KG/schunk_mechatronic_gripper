@@ -48,8 +48,27 @@ headless = DeclareLaunchArgument(
         "using the last successful configuration"
     ),
 )
-
-args = [host, port, serial_port, device_id, headless]
+update_frequency = DeclareLaunchArgument(
+    "update_frequency",
+    default_value="20.0",
+    description=(
+        "Shared rate in Hz for bus updates and joint-state publishing"
+    ),
+)
+baudrate = DeclareLaunchArgument(
+    "baudrate",
+    default_value="115200",
+    description="The Modbus baudrate",
+)
+args = [
+    host,
+    port,
+    serial_port,
+    device_id,
+    headless,
+    update_frequency,
+    baudrate,
+]
 
 
 def generate_launch_description():
@@ -67,6 +86,8 @@ def generate_launch_description():
                     {"serial_port": LaunchConfiguration("serial_port")},
                     {"device_id": LaunchConfiguration("device_id")},
                     {"headless": LaunchConfiguration("headless")},
+                    {"update_frequency": LaunchConfiguration("update_frequency")},
+                    {"baudrate": LaunchConfiguration("baudrate")},
                 ],
                 respawn=True,
                 output="both",
