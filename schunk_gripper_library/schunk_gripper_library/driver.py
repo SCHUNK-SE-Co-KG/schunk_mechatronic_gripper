@@ -158,6 +158,7 @@ class Driver(object):
         self.streaming_active: bool = False
         self.jogging_active: bool = False
         self._normal_update_cycle: float = 0.05  # sec, restored by disable_stream()
+        self._last_status_read: float = 0.0  # time.monotonic() of the last successful plc_input read
 
     def connect(
         self,
@@ -493,11 +494,15 @@ class Driver(object):
                     self.set_control_bit(bit=int(bit_str), value=value)
 
                 self.set_target_position(pos)
-                if not self.send_plc_output(operation="stream target"):
+                if self.web_client:
+                    sent = self.send_plc_output(operation="stream target")
+                else:
+                    # reading the status in the same frame doubles as heartbeat, see _module_update()
+                    sent = self._read_write_plc_now()
+                if not sent:
                     raise RuntimeError("Failed to send streamed target position")
 
             try:
-                # to save bandwidth, we do not read back the gripper's status
                 global_scheduler.execute(func=partial(do_send)).result()
             except Exception:
                 self._end_stream()
@@ -901,8 +906,51 @@ class Driver(object):
             data = self._read_param_now(self.plc_input)
             if data:
                 self.plc_input_buffer = data
+                self._last_status_read = time.monotonic()
                 return True
             return False
+
+    def _read_write_plc_now(self) -> bool:
+        """Writes plc_output and reads plc_input in one Modbus transaction (function code 0x17).
+
+        Bypasses the scheduler. Only available for Modbus connections.
+
+        Returns:
+            bool: True if the transaction succeeded and the input buffer was updated, False otherwise.
+        """
+        if self.web_client or self.mb_device_id is None:
+            return False
+        with self.output_buffer_lock:
+            buffer_cpy = bytearray(self.plc_output_buffer)
+        values = [
+            int.from_bytes(buffer_cpy[i : i + 2], byteorder="big")
+            for i in range(0, len(buffer_cpy), 2)
+        ]
+        with global_modbus_client_lock:
+            try:
+                pdu = self.mb_client.readwrite_registers(
+                    read_address=int(self.plc_input, 16) - 1,
+                    read_count=int(self.readable_parameters[self.plc_input]["registers"]),
+                    write_address=int(self.plc_output, 16) - 1,
+                    values=values,
+                    slave=self.mb_device_id,
+                    no_response_expected=False,
+                )
+            except Exception as e:
+                print(f"{type(e)}: {e} (device id: {self.mb_device_id}, read/write plc data)")
+                return False
+        if pdu.isError():
+            return False
+
+        data = bytearray()
+        for reg in pdu.registers:
+            data.extend(reg.to_bytes(2, byteorder="big"))
+        with self.input_buffer_lock:
+            if len(data) != len(self.plc_input_buffer):
+                return False
+            self.plc_input_buffer = data
+            self._last_status_read = time.monotonic()
+        return True
 
     def send_plc_output(self, operation: str = "heartbeat status") -> bool:
         with self.output_buffer_lock:
@@ -1645,6 +1693,13 @@ class Driver(object):
         fails = 0
         next_time = time.perf_counter()
         while not self.stop_request.is_set():
+            if self.streaming_active and not self.web_client:
+                # modbus stream frames read the status as well, so only poll when they pause
+                next_time = time.perf_counter()
+                wait_sec = self._last_status_read + self.update_cycle_while_streaming - time.monotonic()
+                if wait_sec > 0:
+                    self.stop_request.wait(wait_sec)
+                    continue
             runs_fine = global_scheduler.execute(func=partial(self.receive_plc_input)).result()
             if runs_fine:
                 if self.connected:

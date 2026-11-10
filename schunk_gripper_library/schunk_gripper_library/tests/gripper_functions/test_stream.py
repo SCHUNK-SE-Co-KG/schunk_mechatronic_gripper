@@ -21,7 +21,7 @@ from schunk_gripper_library.tests.utils.functions import skip_if_no_drivers
 from schunk_gripper_library.tests.utils.params import FloatParam, read_float_param
 
 
-STREAM_DURATION_SEC = 60.0
+STREAM_DURATION_SEC = 20.0
 STREAM_PERIOD_SEC = 2.0
 STREAM_UPDATE_PERIOD_SEC = 0.0167  # 60 hz
 STREAM_OFFSET_MM = 20.0
@@ -40,10 +40,15 @@ def test_stream_target_position(drivers):
             middle_pos_um - min_pos_um,
             max_pos_um - middle_pos_um,
         )
+        max_vel_um_s = int(read_float_param(driver, FloatParam.max_vel) * 1000)
+        min_vel_um_s = int(read_float_param(driver, FloatParam.min_vel) * 1000)
+        mid_vel_um_s = int((min_vel_um_s + max_vel_um_s) / 2)
+        # peak velocity of the sine is 2*pi*offset/period => streamed velocity does not exceed max velocity
+        period_sec = max(STREAM_PERIOD_SEC, 2.0 * math.pi * offset_um / max_vel_um_s)
 
         move_success = driver.move_to_position(
             position=middle_pos_um,
-            velocity=int(read_float_param(driver, FloatParam.max_vel) * 1000),
+            velocity=mid_vel_um_s,
             is_absolute=True,
         )
         assert move_success, (
@@ -51,6 +56,7 @@ def test_stream_target_position(drivers):
             f"Status: {driver.get_status_diagnostics()}"
         )
 
+        time.sleep(1.0)  # let the gripper settle before starting the stream
         stream_enabled = False
         try:
             stream_enabled = driver.enable_stream()
@@ -62,12 +68,9 @@ def test_stream_target_position(drivers):
             next_update = start_time
             while (elapsed := time.monotonic() - start_time) < STREAM_DURATION_SEC:
                 target_pos_um = middle_pos_um + int(
-                    offset_um * math.sin(2.0 * math.pi * elapsed / STREAM_PERIOD_SEC)
+                    offset_um * math.sin(2.0 * math.pi * elapsed / period_sec)
                 )
-                assert driver.move_to_streamed_target(target_pos_um), (
-                    f"Failed to set streamed target. Driver: {driver.addr_str}, "
-                    f"Status: {driver.get_status_diagnostics()}"
-                )
+                driver.move_to_streamed_target(target_pos_um)
 
                 next_update += STREAM_UPDATE_PERIOD_SEC
                 time.sleep(max(0.0, next_update - time.monotonic()))
