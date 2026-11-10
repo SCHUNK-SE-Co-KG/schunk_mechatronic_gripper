@@ -156,6 +156,7 @@ class Driver(object):
         self.addr_str: str = ""
         self.stream_target_position_toggle: bool = False
         self.streaming_active: bool = False
+        self.jogging_active: bool = False
         self._normal_update_cycle: float = 0.05  # sec, restored by disable_stream()
 
     def connect(
@@ -217,6 +218,9 @@ class Driver(object):
     def disconnect(self) -> bool:
         self.motion_cancelled.set()
         self.disable_stream()
+        if self.jogging_active:
+            self.jogging_active = False
+            self.motion_lock.release()
         self.stop_module_updates()
 
         if len(_global_modbus_client_map) > 0:
@@ -393,7 +397,7 @@ class Driver(object):
     def enable_stream(self) -> bool:
         """Initiates the target position stream (streaming mode).
 
-        Note: Call this method before using `move_to_position_streamed` to ensure the stream is properly initialized.
+        Note: Call this method before using `move_to_streamed_target` to ensure the stream is properly initialized.
         Returns:
             bool: True if the stream was initiated successfully, False otherwise.
         """
@@ -410,10 +414,7 @@ class Driver(object):
         try:
             # when initializing the stream, we need to init pos, vel and force
             pos = self.get_actual_position()  # current position [um]
-            # use max velocity
-            vel_addr = "0x0630"
-            max_vel_mms, _ = self.decode_module_parameter(self._read_param_now(vel_addr), vel_addr)
-            vel = int(max_vel_mms[0] * 1000)  # [mm/s] -> [um/s]
+            vel = self.module_parameters["max_vel"]  # [um/s]
 
             # max_allow_force (0x06A8) is not available for all variants (e. g. EGK),
             # so we use 90% of max_grp_force as a safe default that works for all grippers.
@@ -423,24 +424,20 @@ class Driver(object):
                 control_bits = {"15": True}
                 return {"3": 0, "5": self._send_cmd(control_bits, pos=pos, vel=vel, force=force)}
 
-            # send the command to initiate the target position stream
-            expected_status = global_scheduler.execute(func=partial(do_send)).result()
+            with self.command_lock:
+                expected_status = global_scheduler.execute(func=partial(do_send)).result()
+                if not self.wait_for_status(bits=expected_status):
+                    return False
 
-            # wait for the received status and check if the stream was successfully initiated
-            if not self.wait_for_status(bits=expected_status):
-                return False
-
-            self._normal_update_cycle = self.update_cycle
-            self.update_cycle = self.update_cycle_while_streaming  # sec
-            self.stream_target_position_toggle = True
-            self.streaming_active = True
-            stream_enabled = True
+                self._normal_update_cycle = self.update_cycle
+                self.update_cycle = self.update_cycle_while_streaming  # sec
+                # the init frame was sent with bit 6 cleared, so the first target must set it
+                self.stream_target_position_toggle = False
+                self.streaming_active = True
+                stream_enabled = True
             return True
         finally:
             if not stream_enabled:
-                self.update_cycle = self._normal_update_cycle
-                self.stream_target_position_toggle = False
-                self.streaming_active = False
                 self.motion_lock.release()
 
     def disable_stream(self) -> None:
@@ -448,12 +445,18 @@ class Driver(object):
         if not self.streaming_active:
             return
         with self.command_lock:
-            self.streaming_active = False
-            self.stream_target_position_toggle = False
-            self.update_cycle = self._normal_update_cycle
-            self.motion_lock.release()
+            self._end_stream()
 
-    def move_to_streamed_target(self, pos: int) -> bool:
+    def _end_stream(self) -> None:
+        """Must be called with `command_lock` held."""
+        if not self.streaming_active:
+            return
+        self.streaming_active = False
+        self.stream_target_position_toggle = False
+        self.update_cycle = self._normal_update_cycle
+        self.motion_lock.release()
+
+    def move_to_streamed_target(self, pos: int) -> None:
         """Sets and sends a new target position without waiting for completion.
 
         Intended for streaming mode, where target positions arrive continuously
@@ -464,10 +467,12 @@ class Driver(object):
         Args:
             pos (int): Target position in micrometers.
 
-        Returns:
-            bool: True if the position was sent successfully, False otherwise.
+        Raises:
+            RuntimeError: If not connected, streaming is not enabled, or sending fails.
+                Streaming mode is ended in all of these cases.
         """
         if not self.connected:
+            self.disable_stream()
             raise RuntimeError("Not connected.")
         with self.command_lock:
             if not self.streaming_active:
@@ -475,7 +480,7 @@ class Driver(object):
 
             self.stream_target_position_toggle = not self.stream_target_position_toggle
 
-            def do_send() -> bool:
+            def do_send() -> None:
                 # The assumption is that the position stream has already been initialized,
                 # thus we just send the command without zero frames or acknowledgement.
                 control_bits = {
@@ -490,16 +495,12 @@ class Driver(object):
                 self.set_target_position(pos)
                 if not self.send_plc_output(operation="stream target"):
                     raise RuntimeError("Failed to send streamed target position")
-                return True
 
             try:
                 # to save bandwidth, we do not read back the gripper's status
-                return global_scheduler.execute(func=partial(do_send)).result()
+                global_scheduler.execute(func=partial(do_send)).result()
             except Exception:
-                self.streaming_active = False
-                self.stream_target_position_toggle = False
-                self.update_cycle = self._normal_update_cycle
-                self.motion_lock.release()
+                self._end_stream()
                 raise
 
     def grip(
@@ -781,6 +782,13 @@ class Driver(object):
         """
         if not self.connected:
             raise RuntimeError("Failed to start jogging: Not connected.")
+        motion_lock_acquired = False
+        if not self.jogging_active:
+            if not self.motion_lock.acquire(blocking=False):
+                raise RuntimeError(
+                    "Failed to start jogging: Another motion command is already in progress."
+                )
+            motion_lock_acquired = True
 
         def do_send() -> dict:
             cmd = {}
@@ -789,9 +797,16 @@ class Driver(object):
 
             return {"5": self._send_cmd(cmd, vel=abs(velocity)), "6": 0, "7": 0}
 
-        with self.command_lock:
-            expected_status = global_scheduler.execute(func=partial(do_send)).result()
-            started = self.wait_for_status(bits=expected_status)
+        started = False
+        try:
+            with self.command_lock:
+                expected_status = global_scheduler.execute(func=partial(do_send)).result()
+                started = self.wait_for_status(bits=expected_status)
+        finally:
+            if started:
+                self.jogging_active = True
+            elif motion_lock_acquired:
+                self.motion_lock.release()
 
         return started
 
@@ -812,6 +827,9 @@ class Driver(object):
             expected_status = global_scheduler.execute(func=partial(do_send)).result()
             stopped = self.wait_for_status(bits=expected_status)
 
+        if stopped and self.jogging_active:
+            self.jogging_active = False
+            self.motion_lock.release()
         return stopped
 
     def twitch_jaws(self) -> bool:
@@ -1116,16 +1134,16 @@ class Driver(object):
         def do_write() -> bool:
             return self._write_param_now(param, data, length if write_raw else 0)
 
-        if not self.motion_lock.acquire(blocking=False):
-            raise RuntimeError(
-                f"Failed to write module parameter '{param}': motion in progress."
-            )
-
-        try:
-            with self.command_lock:
+        # Take command_lock first so concurrent writes queue instead of rejecting each other.
+        with self.command_lock:
+            if not self.motion_lock.acquire(blocking=False):
+                raise RuntimeError(
+                    f"Failed to write module parameter '{param}': motion in progress."
+                )
+            try:
                 return global_scheduler.execute(func=partial(do_write)).result()
-        finally:
-            self.motion_lock.release()
+            finally:
+                self.motion_lock.release()
 
     def _write_param_now(self, param: str, data: bytearray, length: int = 0) -> bool:
         """Writes the given module parameter to the module immediately, bypassing the scheduler.
@@ -1639,6 +1657,7 @@ class Driver(object):
                 next_time += self.update_cycle
             else:
                 self.connected = False
+                self.disable_stream()
                 fails += 1
                 if fails < 3:
                     time.sleep(self.update_cycle)

@@ -1419,10 +1419,11 @@ class Driver(Node):
         try:
             if request.data:
                 # enable stream
-                if gripper["is_streaming"]:
+                if gripper["is_streaming"] and gripper["driver"].streaming_active:
                     response.success = True
                     response.message = "Stream already enabled"
                     return response
+                self._close_stream(gripper)
 
                 enabled = gripper["driver"].enable_stream()
                 if not enabled:
@@ -1439,9 +1440,7 @@ class Driver(Node):
                     response.message = "Stream already disabled"
                     return response
 
-                gripper["is_streaming"] = False
-                gripper["driver"].disable_stream()
-                self._destroy_stream_subscriber(gripper["gripper_id"])
+                self._close_stream(gripper)
 
         except Exception as e:
             self.get_logger().error(str(e))
@@ -1481,20 +1480,25 @@ class Driver(Node):
         if gripper_id in self.stream_subscribers:
             self.destroy_subscription(self.stream_subscribers.pop(gripper_id))
 
+    def _close_stream(self, gripper: Gripper) -> None:
+        gripper["is_streaming"] = False
+        gripper["driver"].disable_stream()
+        self._destroy_stream_subscriber(gripper["gripper_id"])
+
     def _target_position_stream_cb(self, msg: Float32, gripper: Gripper) -> None:
-        if (
-            not gripper["driver"].connected
-            or not gripper["is_streaming"]
-            or not gripper["driver"].streaming_active
-        ):
+        if not gripper["is_streaming"]:
+            return
+        # the library ends the stream on its own, e. g. on connection loss
+        if not gripper["driver"].streaming_active:
+            self._close_stream(gripper)
+            self.get_logger().error(f"Target position stream for '{gripper['gripper_id']}' was closed")
             return
 
         try:
             gripper["driver"].move_to_streamed_target(int(msg.data * 1e6))  # m -> um
         except Exception as e:
             if not gripper["driver"].streaming_active:
-                gripper["is_streaming"] = False
-                self._destroy_stream_subscriber(gripper["gripper_id"])
+                self._close_stream(gripper)
             self.get_logger().error(f"Failed to stream target position for '{gripper['gripper_id']}': {e}")
 
     def _brake_test_cb(
