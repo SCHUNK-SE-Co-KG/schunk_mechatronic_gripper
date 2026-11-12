@@ -1457,30 +1457,29 @@ class Driver(object):
         Returns:
             str: "BKE2" or "BKE3", or an empty string if the gripper is not reachable.
         """
-        return "BKE2"
-        # if not self.web_client:
-        #     return ""
-        # fw_param = "0x1118"
-        # for style, (data_path, _) in ADI_PATHS.items():
-        #     try:
-        #         response = self.web_client.get(
-        #             f"http://{self.host}:{self.port}{data_path}",
-        #             params={"inst": self._adi_inst(fw_param, style), "count": "1"},
-        #         )
-        #     except (ConnectError, ConnectTimeout):
-        #         return ""
-        #     except HTTPError as e:
-        #         print(f"{type(e)}: {e}")
-        #         continue
-        #     # the wrong path may answer with an HTML page instead of failing
-        #     if not response.is_success or "json" not in response.headers.get("content-type", ""):
-        #         continue
-        #     try:
-        #         version = bytes.fromhex(response.json()[0]).rstrip(b"\x00").decode("ascii")
-        #         return self._hardware_style_from_version(version)
-        #     except (ValueError, IndexError, TypeError):
-        #         continue
-        # return ""
+        if not self.web_client:
+            return ""
+        fw_param = "0x1118"
+        for style, (data_path, _) in ADI_PATHS.items():
+            try:
+                response = self.web_client.get(
+                    f"http://{self.host}:{self.port}{data_path}",
+                    params={"inst": self._adi_inst(fw_param, style), "count": "1"},
+                )
+            except (ConnectError, ConnectTimeout):
+                return ""
+            except HTTPError as e:
+                print(f"{type(e)}: {e}")
+                continue
+            # the wrong path may answer with an HTML page instead of failing
+            if not response.is_success or "json" not in response.headers.get("content-type", ""):
+                continue
+            try:
+                version = bytes.fromhex(response.json()[0]).rstrip(b"\x00").decode("ascii")
+                return self._hardware_style_from_version(version)
+            except (ValueError, IndexError, TypeError):
+                continue
+        return ""
 
     @staticmethod
     def _hardware_style_from_version(version: str) -> str:
