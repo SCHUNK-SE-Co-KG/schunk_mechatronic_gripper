@@ -43,6 +43,8 @@ ADI_PATHS: dict[str, tuple[str, str]] = {
     "BKE3": ("/webif/adi/data.json", "/webif/adi/update.json"),
 }
 BKE3_MIN_FIRMWARE_MAJOR: int = 6
+# BKE3 only: writes plc_output and responds with plc_input in one request
+BKE3_SENDRECV_PATH: str = "/webif/adi/sendrecv.json"
 
 
 def get_global_modbus_client(serial_port: str = "/dev/ttyUSB0", baudrate: int = 115200):
@@ -144,7 +146,7 @@ class Driver(object):
         self.web_client: Client | None = None
         self.host: str = ""
         self.port: int = 80
-        self.hardware_style: str = ""  # "BKE2" or "BKE3", only for TCP/IP
+        self.hardware_style: str = ""  # "BKE2" or "BKE3"
         self.web_client_lock: Lock = Lock()
         self.connected: bool = False
         self.polling_thread: Thread = Thread()
@@ -210,6 +212,13 @@ class Driver(object):
             updated = global_scheduler.execute(func=partial(self.update_module_parameters)).result()
             if not updated:
                 return False
+            if not host:
+                try:
+                    self.hardware_style = self._hardware_style_from_version(
+                        str(self.module_parameters["sw_version_txt"])
+                    )
+                except ValueError:
+                    self.hardware_style = ""
             if update_cycle:
                 self.update_cycle = update_cycle
                 self.start_module_updates()
@@ -494,11 +503,11 @@ class Driver(object):
                     self.set_control_bit(bit=int(bit_str), value=value)
 
                 self.set_target_position(pos)
-                if self.web_client:
-                    sent = self.send_plc_output(operation="stream target")
-                else:
+                if self.hardware_style == "BKE3":
                     # reading the status in the same frame doubles as heartbeat, see _module_update()
                     sent = self._read_write_plc_now()
+                else:
+                    sent = self.send_plc_output(operation="stream target")
                 if not sent:
                     raise RuntimeError("Failed to send streamed target position")
 
@@ -911,40 +920,61 @@ class Driver(object):
             return False
 
     def _read_write_plc_now(self) -> bool:
-        """Writes plc_output and reads plc_input in one Modbus transaction (function code 0x17).
+        """Writes plc_output and reads plc_input in one transaction.
 
-        Bypasses the scheduler. Only available for Modbus connections.
+        Only available for BKE3: uses Modbus function code 0x17 or the ADI sendrecv endpoint.
+        Bypasses the scheduler.
 
         Returns:
             bool: True if the transaction succeeded and the input buffer was updated, False otherwise.
         """
-        if self.web_client or self.mb_device_id is None:
+        if self.hardware_style != "BKE3":
             return False
         with self.output_buffer_lock:
             buffer_cpy = bytearray(self.plc_output_buffer)
-        values = [
-            int.from_bytes(buffer_cpy[i : i + 2], byteorder="big")
-            for i in range(0, len(buffer_cpy), 2)
-        ]
-        with global_modbus_client_lock:
-            try:
-                pdu = self.mb_client.readwrite_registers(
-                    read_address=int(self.plc_input, 16) - 1,
-                    read_count=int(self.readable_parameters[self.plc_input]["registers"]),
-                    write_address=int(self.plc_output, 16) - 1,
-                    values=values,
-                    slave=self.mb_device_id,
-                    no_response_expected=False,
-                )
-            except Exception as e:
-                print(f"{type(e)}: {e} (device id: {self.mb_device_id}, read/write plc data)")
-                return False
-        if pdu.isError():
-            return False
 
         data = bytearray()
-        for reg in pdu.registers:
-            data.extend(reg.to_bytes(2, byteorder="big"))
+        if self.web_client:
+            with self.web_client_lock:
+                try:
+                    response = self.web_client.get(
+                        f"http://{self.host}:{self.port}{BKE3_SENDRECV_PATH}",
+                        params={"value": buffer_cpy.hex().upper()},
+                    )
+                except Exception as e:
+                    print(f"{type(e)}: {e} (read/write plc data)")
+                    return False
+            if not response.is_success:
+                return False
+            try:
+                data = bytearray(bytes.fromhex(response.json()[0]))
+            except (ValueError, IndexError, TypeError):
+                return False
+        else:
+            if self.mb_device_id is None:
+                return False
+            values = [
+                int.from_bytes(buffer_cpy[i : i + 2], byteorder="big")
+                for i in range(0, len(buffer_cpy), 2)
+            ]
+            with global_modbus_client_lock:
+                try:
+                    pdu = self.mb_client.readwrite_registers(
+                        read_address=int(self.plc_input, 16) - 1,
+                        read_count=int(self.readable_parameters[self.plc_input]["registers"]),
+                        write_address=int(self.plc_output, 16) - 1,
+                        values=values,
+                        slave=self.mb_device_id,
+                        no_response_expected=False,
+                    )
+                except Exception as e:
+                    print(f"{type(e)}: {e} (device id: {self.mb_device_id}, read/write plc data)")
+                    return False
+            if pdu.isError():
+                return False
+            for reg in pdu.registers:
+                data.extend(reg.to_bytes(2, byteorder="big"))
+
         with self.input_buffer_lock:
             if len(data) != len(self.plc_input_buffer):
                 return False
@@ -1427,30 +1457,40 @@ class Driver(object):
         Returns:
             str: "BKE2" or "BKE3", or an empty string if the gripper is not reachable.
         """
-        if not self.web_client:
-            return ""
-        fw_param = "0x1118"
-        for style, (data_path, _) in ADI_PATHS.items():
-            try:
-                response = self.web_client.get(
-                    f"http://{self.host}:{self.port}{data_path}",
-                    params={"inst": self._adi_inst(fw_param, style), "count": "1"},
-                )
-            except (ConnectError, ConnectTimeout):
-                return ""
-            except HTTPError as e:
-                print(f"{type(e)}: {e}")
-                continue
-            # the wrong path may answer with an HTML page instead of failing
-            if not response.is_success or "json" not in response.headers.get("content-type", ""):
-                continue
-            try:
-                version = bytes.fromhex(response.json()[0]).rstrip(b"\x00").decode("ascii").strip()
-                major = int(version.split(".")[0])
-            except (ValueError, IndexError, TypeError):
-                continue
-            return "BKE3" if major >= BKE3_MIN_FIRMWARE_MAJOR else "BKE2"
-        return ""
+        return "BKE2"
+        # if not self.web_client:
+        #     return ""
+        # fw_param = "0x1118"
+        # for style, (data_path, _) in ADI_PATHS.items():
+        #     try:
+        #         response = self.web_client.get(
+        #             f"http://{self.host}:{self.port}{data_path}",
+        #             params={"inst": self._adi_inst(fw_param, style), "count": "1"},
+        #         )
+        #     except (ConnectError, ConnectTimeout):
+        #         return ""
+        #     except HTTPError as e:
+        #         print(f"{type(e)}: {e}")
+        #         continue
+        #     # the wrong path may answer with an HTML page instead of failing
+        #     if not response.is_success or "json" not in response.headers.get("content-type", ""):
+        #         continue
+        #     try:
+        #         version = bytes.fromhex(response.json()[0]).rstrip(b"\x00").decode("ascii")
+        #         return self._hardware_style_from_version(version)
+        #     except (ValueError, IndexError, TypeError):
+        #         continue
+        # return ""
+
+    @staticmethod
+    def _hardware_style_from_version(version: str) -> str:
+        """Classifies the electronics by the firmware version text (0x1118), e. g. "6.0.1" -> "BKE3".
+
+        Raises:
+            ValueError: If the major version cannot be parsed.
+        """
+        major = int(version.strip().split(".")[0])
+        return "BKE3" if major >= BKE3_MIN_FIRMWARE_MAJOR else "BKE2"
 
     def contains_non_hex_chars(self, buffer: str) -> bool:
         return bool(re.search(r"[^0-9a-fA-F]", buffer))
@@ -1693,8 +1733,8 @@ class Driver(object):
         fails = 0
         next_time = time.perf_counter()
         while not self.stop_request.is_set():
-            if self.streaming_active and not self.web_client:
-                # modbus stream frames read the status as well, so only poll when they pause
+            if self.streaming_active and self.hardware_style == "BKE3":
+                # BKE3 stream frames read the status as well, so only poll when they pause
                 next_time = time.perf_counter()
                 wait_sec = self._last_status_read + self.update_cycle_while_streaming - time.monotonic()
                 if wait_sec > 0:

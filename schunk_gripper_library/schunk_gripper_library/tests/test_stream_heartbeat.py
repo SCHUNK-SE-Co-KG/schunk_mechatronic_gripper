@@ -19,9 +19,10 @@ import time
 from schunk_gripper_library.driver import Driver
 
 
-def make_streaming_modbus_driver() -> tuple[Driver, list[float]]:
+def make_streaming_bke3_driver() -> tuple[Driver, list[float]]:
     driver = Driver()
     driver.connected = True
+    driver.hardware_style = "BKE3"
     driver.streaming_active = True
     driver.update_cycle_while_streaming = 0.2
     polls: list[float] = []
@@ -37,7 +38,7 @@ def make_streaming_modbus_driver() -> tuple[Driver, list[float]]:
 
 
 def test_no_heartbeat_poll_while_stream_frames_arrive():
-    driver, polls = make_streaming_modbus_driver()
+    driver, polls = make_streaming_bke3_driver()
     driver.start_module_updates()
     try:
         end = time.monotonic() + 1.0
@@ -50,7 +51,7 @@ def test_no_heartbeat_poll_while_stream_frames_arrive():
 
 
 def test_heartbeat_poll_when_stream_frames_pause():
-    driver, polls = make_streaming_modbus_driver()
+    driver, polls = make_streaming_bke3_driver()
     driver.start_module_updates()
     try:
         time.sleep(1.1)
@@ -59,3 +60,15 @@ def test_heartbeat_poll_when_stream_frames_pause():
     assert 4 <= len(polls) <= 6
     gaps = [b - a for a, b in zip(polls, polls[1:])]
     assert all(0.15 < gap < 0.3 for gap in gaps)
+
+
+def test_hardware_style_from_version():
+    assert Driver._hardware_style_from_version("6.0.1") == "BKE3"
+    assert Driver._hardware_style_from_version(" 7.2 ") == "BKE3"
+    assert Driver._hardware_style_from_version("5.4.3") == "BKE2"
+
+
+def test_read_write_is_only_used_for_bke3():
+    driver = Driver()
+    driver.hardware_style = "BKE2"
+    assert not driver._read_write_plc_now()
