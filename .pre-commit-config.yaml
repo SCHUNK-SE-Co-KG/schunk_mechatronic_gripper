@@ -1,3 +1,5 @@
+exclude: ^security/trivy-reports/
+
 repos:
   # Standard hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
